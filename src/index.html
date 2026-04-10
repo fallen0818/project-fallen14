@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <meta name="description" content="Fallen Pro - Enterprise data entry, analytics, and project management suite powered by real-time Supabase backend." />
+    <meta name="theme-color" content="#003d9b" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect fill='%23003d9b' width='32' height='32' rx='8'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='bold'%3EF%3C/text%3E%3C/svg%3E" type="image/svg+xml" />
+    <title>Fallen Pro - Enterprise Suite</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Manrope:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="./styles/main.css" />
+</head>
+
+<body class="bg-surface text-on-surface min-h-screen">
+    <!-- SideNavBar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <div class="logo-icon primary-gradient">
+                    <span class="material-symbols-outlined filled">analytics</span>
+                </div>
+                <div>
+                    <h1 class="app-title">Fallen Pro</h1>
+                    <p class="app-subtitle">Enterprise Suite</p>
+                </div>
+            </div>
+        </div>
+        <nav class="sidebar-nav" id="sidebar-nav">
+            <a href="#dashboard" class="nav-item" data-route="dashboard">
+                <span class="material-symbols-outlined">dashboard</span>
+                <span class="nav-label">Dashboard</span>
+            </a>
+            <a href="#data-entry" class="nav-item" data-route="data-entry">
+                <span class="material-symbols-outlined">edit_note</span>
+                <span class="nav-label">Data Entry</span>
+            </a>
+            <a href="#tasks" class="nav-item" data-route="tasks">
+                <span class="material-symbols-outlined">playlist_add_check</span>
+                <span class="nav-label">Tasks</span>
+            </a>
+            <a href="#reports" class="nav-item" data-route="reports">
+                <span class="material-symbols-outlined">analytics</span>
+                <span class="nav-label">Reports</span>
+            </a>
+            <a href="#settings" class="nav-item" data-route="settings">
+                <span class="material-symbols-outlined">settings</span>
+                <span class="nav-label">Settings</span>
+            </a>
+        </nav>
+        <div class="sidebar-footer" id="org-info">
+            <div class="org-card">
+                <img alt="Organization Logo" class="org-avatar"
+                    src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect fill='%23003d9b' width='40' height='40' rx='20'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='white' font-size='18' font-weight='bold'%3EA%3C/text%3E%3C/svg%3E" />
+                <div class="org-info">
+                    <p class="org-name">Acme Analytics</p>
+                    <p class="org-tier">Admin Tier</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- TopNavBar -->
+    <header class="topnav" id="topnav">
+        <div class="topnav-left">
+            <div class="search-container">
+                <span class="material-symbols-outlined search-icon">search</span>
+                <input class="search-input" id="global-search" placeholder="Search data points, entries, or reports..."
+                    type="text" />
+            </div>
+        </div>
+        <div class="topnav-right">
+            <div class="topnav-actions">
+                <button class="icon-button notification-btn" id="notification-btn">
+                    <span class="material-symbols-outlined">notifications</span>
+                    <span class="notification-badge hidden"></span>
+                </button>
+                <button class="icon-button">
+                    <span class="material-symbols-outlined">help</span>
+                </button>
+            </div>
+            <div class="topnav-divider"></div>
+            <div class="user-profile" id="user-profile">
+                <div class="user-info hidden sm:block">
+                    <p class="user-name" id="user-name">Guest User</p>
+                    <p class="user-role" id="user-role">Sign in to continue</p>
+                </div>
+                <img class="user-avatar" id="user-avatar" alt="User profile"
+                    src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect fill='%23e1e2e4' width='40' height='40' rx='20'/%3E%3Ctext x='50%25' y='55%25' dominant-baseline='middle' text-anchor='middle' fill='%23434654' font-size='16'%3E%F0%9F%91%A4%3C/text%3E%3C/svg%3E" />
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content" id="app">
+        <!-- Content will be injected here by the router -->
+        <div class="loading-screen" id="loading-screen">
+            <div class="loading-spinner"></div>
+            <p class="loading-text">Loading Fallen Pro...</p>
+        </div>
+    </main>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay hidden" id="auth-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="auth-modal-title">Sign In</h2>
+                <button class="modal-close" id="auth-modal-close">
+                    <span class="material-symbols-outlined">close</span>
+                </button>
+            </div>
+            <div class="modal-body" id="auth-modal-body">
+                <!-- Auth form injected here -->
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./js/main.js"></script>
+</body>
+
+</html>

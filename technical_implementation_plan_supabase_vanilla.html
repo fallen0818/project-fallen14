@@ -1,0 +1,80 @@
+# Technical Specification: Analyst Pro (Supabase + Vanilla JS)
+
+## 1. Project Overview
+This document outlines the technical architecture for implementing the "Analyst Pro" suite (Data Entry & Analytics) using **Supabase** for the backend (Database, Auth, Real-time) and **Vanilla JavaScript/CSS/HTML** for the frontend.
+
+## 2. Backend Architecture (Supabase)
+
+### Database Schema (PostgreSQL)
+
+#### `projects` Table
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `uuid` | Primary Key |
+| `created_at` | `timestamp` | Auto-generated |
+| `title` | `text` | Project official title |
+| `category` | `text` | Strategic category (e.g., Internal Infrastructure) |
+| `summary` | `text` | Executive summary |
+| `initial_allocation` | `numeric` | Financial framework: starting capital |
+| `projected_roi` | `numeric` | 12M percentage |
+| `fiscal_commencement`| `date` | Project start date |
+| `funding_sources` | `text[]` | Array of source tags (Operational, VC, etc.) |
+| `status` | `text` | Enum: 'draft', 'active', 'flagged', 'completed' |
+| `user_id` | `uuid` | FK to `auth.users` |
+
+#### `unit_distribution` Table
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | `uuid` | Primary Key |
+| `project_id` | `uuid` | FK to `projects.id` |
+| `engineering_heads` | `integer` | Count of engineering leads |
+| `design_ux_leads` | `integer` | Count of design/UX leads |
+| `qa_count` | `integer` | Count of QA staff |
+| `data_gov_count` | `integer` | Count of data governance staff |
+
+### Authentication
+- Use Supabase Auth for user management.
+- Restricted access to the "Data Entry" and "Reports" based on user roles (defined in a custom `profiles` table).
+
+### Real-time Features
+- Enable Real-time on the `projects` table to update the "Analytics Dashboard" instantly as new entries are added or modified.
+
+---
+
+## 3. Frontend Implementation (Vanilla JS)
+
+### State Management
+- A simple global `State` object to hold user session, current projects list, and dashboard metrics.
+- Use `CustomEvents` for component communication (e.g., `data-updated` event to trigger re-renders).
+
+### Routing
+- Client-side routing using a hash-based router or the History API.
+- Logic to inject screen templates into a main `#app` container.
+
+### API Integration
+- Use the `@supabase/supabase-js` client library.
+- **Example Data Fetching:**
+  ```javascript
+  const { data, error } = await supabase
+    .from('projects')
+    .select('*')
+    .order('created_at', { ascending: false });
+  ```
+
+### Components & UI
+- **CSS:** Standard CSS variables for the "Metric Foundry" design system colors and spacing. Utility classes for layout (Flexbox/Grid).
+- **Charts:** Use a lightweight library like `Chart.js` or `ApexCharts` to render the "Data Ingestion Trends" and "Regional Distribution" graphs seen in the design.
+
+---
+
+## 4. Key Workflows
+
+### Data Submission
+1. User fills out the `Project Initiation Form`.
+2. On submit, validate inputs via JS.
+3. Call `supabase.from('projects').insert([...])`.
+4. On success, redirect to the dashboard or show a "Sync Active" toast.
+
+### Real-time Dashboard Updates
+1. Dashboard subscribes to `projects` table changes via `supabase.channel()`.
+2. When an `INSERT` or `UPDATE` event occurs, recalculate KPIs (Total Entries, Accuracy Rate) and update the Trend Graph without a page reload.

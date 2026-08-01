@@ -1,133 +1,75 @@
-# Analyst Pro - Enterprise Data Entry & Analytics Suite
+# Investment Control — Capex · Procurement · Project Monitoring
 
-A modern enterprise analytics platform built with Supabase and Vanilla JavaScript. Features a premium "Informed Monolith" design system with real-time data synchronization, project management, and comprehensive analytics dashboards.
+A full-stack app for the capital-investment lifecycle: plan capital budgets, source and order against them, then deliver and monitor the resulting projects.
 
-## Features
+**Stack:** Next.js 16 (App Router) · React 19 · TypeScript · Supabase (Postgres + Auth + RLS) · Tailwind CSS v4.
 
-- **Real-time Dashboard** - Live KPI tracking, data ingestion trends, and project analytics
-- **Data Entry Forms** - Comprehensive project initiation with financial and personnel tracking
-- **Authentication** - User sign-up, sign-in, and session management via Supabase Auth
-- **Design System** - Premium "Metric Foundry" design with tonal layering and glassmorphism
-- **Responsive** - Mobile-friendly layouts with adaptive components
-- **Chart.js Integration** - Beautiful data visualizations and trend analysis
+## Modules
 
-## Tech Stack
+- **Capex Plan** — capex budgets, asset requests, approval matrices.
+- **Procurement** — procurement items, purchase requisitions, vendor bidding (RFQs), purchase orders.
+- **Project Monitoring** — project charters, milestones, financial tracking, risk & issue log.
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Vanilla JavaScript, HTML5, CSS3 |
-| Backend | Supabase (PostgreSQL, Auth, Real-time) |
-| Bundler | Vite |
-| Charts | Chart.js |
-| Icons | Material Symbols |
-| Fonts | Inter, Manrope |
+All eleven entities share one metadata-driven CRUD engine (`src/lib/crud`), so each list/create/edit/delete screen is generated from a field config rather than hand-written. Records are linked across modules through reference fields (e.g. a procurement item points at its capex asset request; a milestone points at its project charter).
 
-## Getting Started
+## Project layout
 
-### Prerequisites
+```
+src/
+├── app/
+│   ├── (app)/                 # Authenticated area (sidebar shell)
+│   │   ├── dashboard/         # Cross-domain overview KPIs
+│   │   └── [module]/[entity]/ # Generated CRUD screen for every entity
+│   ├── login/                 # Supabase email/password auth
+│   └── auth/signout/          # Sign-out route handler
+├── components/
+│   ├── crud/                  # EntityManager (list + form engine)
+│   ├── layout/                # Sidebar, PageHeader
+│   └── ui/                    # Button, Badge, Modal, Toast, StatCard, ProgressBar
+├── lib/
+│   ├── crud/                  # CRUD types, generic service, entity configs
+│   ├── supabase/              # Browser + server clients, auth middleware
+│   └── utils.ts, constants.ts
+└── types/                     # Shared TypeScript types
+supabase/
+├── schema.sql                 # Canonical database schema (24 tables + RLS)
+└── drop-all.sql               # Teardown / reset script
+schema/                        # JSON Schema (draft 2020-12) source of the data model
+```
 
-- Node.js 18+ and npm
-- A [Supabase](https://supabase.com) account (free tier works)
+## Setup
 
-### Setup
-
-1. **Clone the repository:**
-   ```bash
-   git clone <repo-url>
-   cd stitch-wesm
+1. **Create a Supabase project** and run `supabase/schema.sql` in the SQL Editor.
+2. **Configure env** — copy `.env.example` to `.env.local` and set:
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
    ```
-
-2. **Install dependencies:**
+   (A working `.env.local` is already present from the previous project.)
+3. **Install & run:**
    ```bash
    npm install
-   ```
-
-3. **Set up Supabase:**
-   - Create a new project at [supabase.com](https://supabase.com)
-   - Run the SQL from `supabase-setup.sql` in the Supabase SQL Editor
-   - Enable real-time for the `projects` table (Database -> Replication)
-
-4. **Configure environment variables:**
-   ```bash
-   cp .env.example .env.local
-   ```
-   Edit `.env.local` and add your Supabase credentials:
-   ```
-   VITE_SUPABASE_URL=https://your-project.supabase.co
-   VITE_SUPABASE_ANON_KEY=your-anon-key-here
-   ```
-
-5. **Start the development server:**
-   ```bash
    npm run dev
    ```
-   The app will open at `http://localhost:3000`
-
-### Building for Production
-
-```bash
-npm run build
-```
-
-The production files will be in `dist/`. Deploy to any static hosting (Vercel, Netlify, etc.).
-
-## Project Structure
-
-```
-stitch-wesm/
-├── src/
-│   ├── index.html          # Main HTML entry point
-│   ├── styles/
-│   │   └── main.css        # Complete design system CSS
-│   └── js/
-│       ├── main.js         # Application bootstrap
-│       ├── config.js       # Environment configuration
-│       ├── state.js        # Global state management
-│       ├── events.js       # Custom event system
-│       ├── router.js       # Hash-based router
-│       ├── supabase.js     # Supabase client & DB helpers
-│       ├── auth.js         # Authentication module
-│       ├── ui.js           # UI utilities (toasts, modals)
-│       └── pages/
-│           ├── dashboard.js    # Analytics dashboard
-│           ├── data-entry.js   # Project initiation form
-│           ├── reports.js      # Reports center
-│           ├── settings.js     # User settings
-│           └── login.js        # Authentication page
-├── supabase-setup.sql      # Database setup script
-├── package.json
-├── vite.config.js
-├── .env.example
-└── README.md
-```
-
-## Design System
-
-The UI follows the "Metric Foundry" design specification:
-- **Primary Color:** `#003d9b` (Deep Blue)
-- **Typography:** Manrope (headlines) + Inter (body)
-- **Philosophy:** "Borders are design failures" - uses tonal layering for separation
-- **Components:** Glassmorphism modals, gradient CTAs, no-line data tables
-
-## Database Schema
-
-### `projects` Table
-Stores project data including title, category, financial allocation, ROI projections, and status.
-
-### `unit_distribution` Table
-Tracks personnel allocation per project (engineering, design, QA, data governance).
-
-### `profiles` Table
-Links to Supabase Auth users for profile management.
+   Open http://localhost:3000 — you'll be redirected to `/login`. Create an account, then explore the modules from the sidebar.
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Build for production |
-| `npm run preview` | Preview production build locally |
+| Command            | Purpose                                  |
+|--------------------|------------------------------------------|
+| `npm run dev`      | Start the dev server                     |
+| `npm run build`    | Production build                         |
+| `npm run start`    | Serve the production build               |
+| `npm run typecheck`| `tsc --noEmit`                           |
+| `npm run test`     | Unit tests (Vitest)                      |
+| `npm run lint`     | ESLint                                   |
 
-## License
+## Security model
 
-Private - All rights reserved
+Row Level Security is the enforcement boundary. Reads require an authenticated session; writes are restricted to the record's owner (`owner_id = auth.uid()`), with child tables gated through their parent's owner. The anon key is safe to expose to the browser because RLS — not key secrecy — protects the data. See `supabase/schema.sql` for the full policy set.
+
+## Notes
+
+- The database was reset from the earlier 5-table dashboard to this 24-table model. Run `supabase/drop-all.sql` then `supabase/schema.sql` for a clean slate.
+- Human-readable codes (e.g. `CAPEX-000042`, `PO-000900`) are generated automatically on create.
+- Child collections (approval-matrix levels, vendor bids, PO line items, milestone deliverables, charter funding links) exist in the schema and are ready for detail-view editors as a next iteration; the current UI manages the eleven top-level entities and their relationships.

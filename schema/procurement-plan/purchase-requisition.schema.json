@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/purchase-requisition.schema.json",
+  "title": "Purchase Requisition",
+  "description": "An internal request to procure one or more procurement items, initiating the sourcing process.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requisitionId", "requestedBy", "department", "requisitionDate", "lineItems", "currency", "status"],
+  "properties": {
+    "requisitionId": {
+      "type": "string",
+      "pattern": "^PR-[0-9]{6}$",
+      "examples": ["PR-000501"]
+    },
+    "title": { "type": "string" },
+    "requestedBy": { "$ref": "#/$defs/nonEmptyString" },
+    "department": { "$ref": "#/$defs/nonEmptyString" },
+    "requisitionDate": { "$ref": "#/$defs/date" },
+    "requiredByDate": { "$ref": "#/$defs/date" },
+    "lineItems": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/requisitionLine" }
+    },
+    "estimatedTotal": { "$ref": "#/$defs/money" },
+    "currency": { "$ref": "#/$defs/currency" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "submitted", "approved", "rejected", "converted-to-rfq", "closed"]
+    },
+    "approvedBy": { "type": "string" },
+    "createdAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "money": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "requisitionLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["procurementItemId", "quantity"],
+      "properties": {
+        "procurementItemId": {
+          "description": "FK -> procurement-plan/procurement-item.itemId.",
+          "type": "string",
+          "pattern": "^PRC-ITEM-[0-9]{6}$"
+        },
+        "quantity": { "type": "number", "exclusiveMinimum": 0 },
+        "estimatedUnitCost": { "$ref": "#/$defs/money" },
+        "notes": { "type": "string" }
+      }
+    }
+  }
+}

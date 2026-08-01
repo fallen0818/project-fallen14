@@ -1,0 +1,16 @@
+{
+  "name": "capex-procurement-monitoring-schemas",
+  "version": "1.0.0",
+  "description": "JSON Schema (draft 2020-12) definitions for the Capex -> Procurement -> Project Monitoring lifecycle.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "validate": "node validate.mjs"
+  },
+  "keywords": ["json-schema", "capex", "procurement", "project-monitoring"],
+  "license": "MIT",
+  "devDependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  }
+}

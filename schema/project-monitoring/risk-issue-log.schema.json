@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/project-monitoring/risk-issue-log.schema.json",
+  "title": "Risk / Issue Log Entry",
+  "description": "A single risk (potential) or issue (realized) tracked against a project, including assessment and mitigation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["entryId", "projectId", "type", "title", "status", "raisedDate"],
+  "properties": {
+    "entryId": {
+      "type": "string",
+      "pattern": "^(RISK|ISSUE)-[0-9]{6}$",
+      "examples": ["RISK-000012", "ISSUE-000005"]
+    },
+    "projectId": {
+      "description": "FK -> project-monitoring/project-charter.projectId.",
+      "type": "string",
+      "pattern": "^PRJ-[0-9]{6}$"
+    },
+    "type": {
+      "type": "string",
+      "enum": ["risk", "issue"]
+    },
+    "title": { "$ref": "#/$defs/nonEmptyString" },
+    "description": { "type": "string" },
+    "category": {
+      "type": "string",
+      "enum": ["schedule", "cost", "scope", "quality", "resource", "procurement", "technical", "external", "safety"]
+    },
+    "probability": {
+      "description": "Likelihood the risk materializes (risks only).",
+      "type": "string",
+      "enum": ["rare", "unlikely", "possible", "likely", "almost-certain"]
+    },
+    "impact": {
+      "type": "string",
+      "enum": ["negligible", "minor", "moderate", "major", "severe"]
+    },
+    "severity": {
+      "description": "Derived risk rating from probability x impact.",
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "mitigating", "monitoring", "escalated", "resolved", "closed"]
+    },
+    "owner": { "type": "string" },
+    "mitigationPlan": { "type": "string" },
+    "contingencyPlan": { "type": "string" },
+    "linkedMilestoneId": {
+      "description": "Affected milestone. FK -> project-monitoring/milestone-tracker.milestoneId.",
+      "type": "string",
+      "pattern": "^MS-[0-9]{6}$"
+    },
+    "raisedDate": { "$ref": "#/$defs/date" },
+    "dueDate": { "$ref": "#/$defs/date" },
+    "resolvedDate": { "$ref": "#/$defs/date" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "date": { "type": "string", "format": "date" }
+  }
+}

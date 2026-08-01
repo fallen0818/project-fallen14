@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/capex-plan/approval-matrix.schema.json",
+  "title": "Approval Matrix",
+  "description": "Authorization levels and financial thresholds that govern who may approve capital expenditure at each amount.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["matrixId", "currency", "effectiveFrom", "levels"],
+  "properties": {
+    "matrixId": {
+      "type": "string",
+      "pattern": "^APPX-[0-9]{4}$",
+      "examples": ["APPX-0001"]
+    },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "currency": { "$ref": "#/$defs/currency" },
+    "effectiveFrom": { "$ref": "#/$defs/date" },
+    "effectiveTo": { "$ref": "#/$defs/date" },
+    "levels": {
+      "description": "Approval tiers ordered by ascending authority. Thresholds should form a contiguous, non-overlapping range.",
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/approvalLevel" }
+    }
+  },
+  "$defs": {
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "date": { "type": "string", "format": "date" },
+    "money": { "type": "number", "minimum": 0 },
+    "approvalLevel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "approverRole", "minAmount"],
+      "properties": {
+        "level": {
+          "description": "Authorization level; higher numbers denote greater authority. Referenced by asset-request.approvals[].level.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "approverRole": { "type": "string", "minLength": 1 },
+        "approverTitle": { "type": "string" },
+        "minAmount": {
+          "description": "Inclusive lower bound of the amount this level may approve.",
+          "$ref": "#/$defs/money"
+        },
+        "maxAmount": {
+          "description": "Inclusive upper bound. Omit for an unbounded top tier.",
+          "$ref": "#/$defs/money"
+        },
+        "requiresQuorum": {
+          "description": "Number of approvers required at this level (e.g. board vote).",
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "escalationRole": {
+          "description": "Role the request escalates to on rejection or timeout.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/vendor-bidding.schema.json",
+  "title": "Vendor Bidding",
+  "description": "A request for quotation (RFQ) against a requisition, capturing vendor quotes and their evaluation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rfqId", "requisitionId", "issueDate", "closeDate", "status", "bids"],
+  "properties": {
+    "rfqId": {
+      "type": "string",
+      "pattern": "^RFQ-[0-9]{6}$",
+      "examples": ["RFQ-000777"]
+    },
+    "requisitionId": {
+      "description": "FK -> procurement-plan/purchase-requisition.requisitionId.",
+      "type": "string",
+      "pattern": "^PR-[0-9]{6}$"
+    },
+    "title": { "type": "string" },
+    "issueDate": { "$ref": "#/$defs/date" },
+    "closeDate": { "$ref": "#/$defs/date" },
+    "currency": { "$ref": "#/$defs/currency" },
+    "evaluationCriteria": {
+      "description": "Weighted criteria used to score bids. Weights should sum to 1.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "weight"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "weight": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["open", "closed", "under-evaluation", "awarded", "cancelled"]
+    },
+    "bids": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/bid" }
+    },
+    "awardedVendorId": {
+      "description": "Vendor selected for award; should match a bids[].vendorId.",
+      "type": "string"
+    },
+    "createdAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "money": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "bid": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vendorId", "vendorName", "totalPrice", "currency"],
+      "properties": {
+        "vendorId": { "type": "string", "minLength": 1 },
+        "vendorName": { "type": "string", "minLength": 1 },
+        "submittedAt": { "type": "string", "format": "date-time" },
+        "totalPrice": { "$ref": "#/$defs/money" },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "leadTimeDays": { "type": "integer", "minimum": 0 },
+        "lineQuotes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["procurementItemId", "unitPrice"],
+            "properties": {
+              "procurementItemId": {
+                "description": "FK -> procurement-plan/procurement-item.itemId.",
+                "type": "string",
+                "pattern": "^PRC-ITEM-[0-9]{6}$"
+              },
+              "unitPrice": { "$ref": "#/$defs/money" }
+            }
+          }
+        },
+        "evaluationScore": {
+          "description": "Weighted composite score (0-100).",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "compliant": {
+          "description": "Whether the bid meets mandatory requirements.",
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

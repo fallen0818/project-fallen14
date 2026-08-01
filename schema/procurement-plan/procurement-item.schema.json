@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/procurement-item.schema.json",
+  "title": "Procurement Item",
+  "description": "A discrete good or service to be sourced, traceable to an approved capital-expenditure asset request.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["itemId", "capexRequestId", "description", "category", "quantity", "unitOfMeasure", "estimatedUnitCost", "currency"],
+  "properties": {
+    "itemId": {
+      "type": "string",
+      "pattern": "^PRC-ITEM-[0-9]{6}$",
+      "examples": ["PRC-ITEM-000101"]
+    },
+    "capexRequestId": {
+      "description": "Approved asset request this item fulfils. FK -> capex-plan/asset-request.requestId.",
+      "type": "string",
+      "pattern": "^CAPEX-[0-9]{6}$"
+    },
+    "description": { "$ref": "#/$defs/nonEmptyString" },
+    "category": {
+      "type": "string",
+      "enum": ["goods", "services", "works", "software-license", "subscription"]
+    },
+    "quantity": {
+      "type": "number",
+      "exclusiveMinimum": 0
+    },
+    "unitOfMeasure": {
+      "description": "Unit the quantity is expressed in.",
+      "type": "string",
+      "examples": ["each", "hour", "licence", "kg", "m", "lot"]
+    },
+    "estimatedUnitCost": { "$ref": "#/$defs/money" },
+    "currency": { "$ref": "#/$defs/currency" },
+    "estimatedTotalCost": {
+      "description": "Convenience total (quantity x estimatedUnitCost). Systems may compute this.",
+      "$ref": "#/$defs/money"
+    },
+    "specifications": {
+      "description": "Free-form or structured technical requirements.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "preferredVendorId": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["identified", "requisitioned", "sourcing", "ordered", "received", "cancelled"],
+      "default": "identified"
+    },
+    "createdAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "money": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

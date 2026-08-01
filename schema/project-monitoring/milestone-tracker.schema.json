@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/project-monitoring/milestone-tracker.schema.json",
+  "title": "Milestone Tracker",
+  "description": "A project milestone with its deliverables and physical progress against plan.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["milestoneId", "projectId", "name", "plannedStart", "plannedEnd", "status", "physicalProgressPercent"],
+  "properties": {
+    "milestoneId": {
+      "type": "string",
+      "pattern": "^MS-[0-9]{6}$",
+      "examples": ["MS-000031"]
+    },
+    "projectId": {
+      "description": "FK -> project-monitoring/project-charter.projectId.",
+      "type": "string",
+      "pattern": "^PRJ-[0-9]{6}$"
+    },
+    "name": { "$ref": "#/$defs/nonEmptyString" },
+    "description": { "type": "string" },
+    "weight": {
+      "description": "Relative weight of this milestone in overall project progress (0-1). Weights across a project should sum to 1.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "deliverables": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/deliverable" }
+    },
+    "plannedStart": { "$ref": "#/$defs/date" },
+    "plannedEnd": { "$ref": "#/$defs/date" },
+    "actualStart": { "$ref": "#/$defs/date" },
+    "actualEnd": { "$ref": "#/$defs/date" },
+    "physicalProgressPercent": {
+      "description": "Physical (not financial) completion percentage.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "status": {
+      "type": "string",
+      "enum": ["not-started", "in-progress", "at-risk", "delayed", "completed", "cancelled"]
+    },
+    "dependsOn": {
+      "description": "Milestones that must complete first. FK -> milestone-tracker.milestoneId.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^MS-[0-9]{6}$" }
+    },
+    "updatedAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "deliverable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "status"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "in-progress", "submitted", "accepted", "rejected"]
+        },
+        "dueDate": { "type": "string", "format": "date" },
+        "acceptedDate": { "type": "string", "format": "date" }
+      }
+    }
+  }
+}

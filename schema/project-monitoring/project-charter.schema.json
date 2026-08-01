@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/project-monitoring/project-charter.schema.json",
+  "title": "Project Charter",
+  "description": "Foundational definition of a project: scope, timeline, governance and baseline budget, linked to the capital expenditures that fund it.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["projectId", "title", "sponsor", "projectManager", "startDate", "plannedEndDate", "baselineBudget", "currency", "status"],
+  "properties": {
+    "projectId": {
+      "type": "string",
+      "pattern": "^PRJ-[0-9]{6}$",
+      "examples": ["PRJ-000010"]
+    },
+    "charterVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1
+    },
+    "title": { "$ref": "#/$defs/nonEmptyString" },
+    "description": { "type": "string" },
+    "sponsor": { "$ref": "#/$defs/nonEmptyString" },
+    "projectManager": { "$ref": "#/$defs/nonEmptyString" },
+    "objectives": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inScope": { "type": "array", "items": { "type": "string" } },
+        "outOfScope": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "startDate": { "$ref": "#/$defs/date" },
+    "plannedEndDate": { "$ref": "#/$defs/date" },
+    "baselineBudget": { "$ref": "#/$defs/money" },
+    "currency": { "$ref": "#/$defs/currency" },
+    "fundingCapexRequestIds": {
+      "description": "Approved asset requests funding this project. FK -> capex-plan/asset-request.requestId.",
+      "type": "array",
+      "items": { "type": "string", "pattern": "^CAPEX-[0-9]{6}$" }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "chartered", "active", "on-hold", "completed", "cancelled"]
+    },
+    "createdAt": { "$ref": "#/$defs/timestamp" },
+    "updatedAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "money": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" }
+  }
+}

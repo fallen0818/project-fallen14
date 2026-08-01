@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/capex-plan/capex-budget.schema.json",
+  "title": "Capex Budget",
+  "description": "Yearly or quarterly capital-expenditure budget allocation for a department or category.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["budgetId", "fiscalYear", "period", "department", "allocatedAmount", "currency", "status"],
+  "properties": {
+    "budgetId": {
+      "description": "Unique budget allocation identifier.",
+      "type": "string",
+      "pattern": "^CBUD-[0-9]{4}-[0-9]{4}$",
+      "examples": ["CBUD-2026-0001"]
+    },
+    "fiscalYear": {
+      "type": "integer",
+      "minimum": 2000,
+      "maximum": 2100
+    },
+    "period": {
+      "description": "Allocation period. Use 'FY' for a full-year budget or a specific quarter.",
+      "type": "string",
+      "enum": ["FY", "Q1", "Q2", "Q3", "Q4"]
+    },
+    "department": { "$ref": "#/$defs/nonEmptyString" },
+    "category": {
+      "description": "Capital category the budget applies to.",
+      "type": "string",
+      "enum": ["it-infrastructure", "facilities", "machinery-equipment", "vehicles", "software", "research-development", "other"]
+    },
+    "allocatedAmount": { "$ref": "#/$defs/money" },
+    "committedAmount": {
+      "description": "Portion already committed via approved asset requests / POs.",
+      "$ref": "#/$defs/money",
+      "default": 0
+    },
+    "spentAmount": {
+      "description": "Portion actually disbursed.",
+      "$ref": "#/$defs/money",
+      "default": 0
+    },
+    "currency": { "$ref": "#/$defs/currency" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "proposed", "approved", "locked", "closed"]
+    },
+    "ownerId": {
+      "description": "User or role accountable for the budget.",
+      "type": "string"
+    },
+    "notes": { "type": "string" },
+    "createdAt": { "$ref": "#/$defs/timestamp" },
+    "updatedAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
+    "money": {
+      "description": "A non-negative monetary amount.",
+      "type": "number",
+      "minimum": 0
+    },
+    "currency": {
+      "description": "ISO 4217 three-letter currency code.",
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "examples": ["USD", "EUR", "PHP"]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

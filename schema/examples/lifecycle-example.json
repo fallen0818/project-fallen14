@@ -1,0 +1,173 @@
+{
+  "_note": "A single linked instance flowing Capex -> Procurement -> Project Monitoring. Each object validates against the schema named by its key.",
+  "capex-budget": {
+    "budgetId": "CBUD-2026-0001",
+    "fiscalYear": 2026,
+    "period": "FY",
+    "department": "IT",
+    "category": "it-infrastructure",
+    "allocatedAmount": 500000,
+    "committedAmount": 120000,
+    "spentAmount": 0,
+    "currency": "USD",
+    "status": "approved",
+    "ownerId": "user-cfo-01",
+    "createdAt": "2026-01-05T09:00:00Z"
+  },
+  "asset-request": {
+    "requestId": "CAPEX-000042",
+    "budgetId": "CBUD-2026-0001",
+    "title": "Core network switch refresh",
+    "description": "Replace end-of-life datacenter switches.",
+    "assetCategory": "it-infrastructure",
+    "estimatedCost": 120000,
+    "currency": "USD",
+    "justification": "Current hardware out of vendor support in Q3.",
+    "priority": "high",
+    "requestedBy": "user-neteng-07",
+    "requestDate": "2026-01-12",
+    "requiredByDate": "2026-06-30",
+    "status": "approved",
+    "approvals": [
+      { "level": 2, "approverId": "user-itdir-02", "approverTitle": "IT Director", "decision": "approved", "decidedAt": "2026-01-15T14:20:00Z" }
+    ]
+  },
+  "approval-matrix": {
+    "matrixId": "APPX-0001",
+    "name": "FY2026 Capex Authorization",
+    "currency": "USD",
+    "effectiveFrom": "2026-01-01",
+    "levels": [
+      { "level": 1, "approverRole": "manager", "approverTitle": "Line Manager", "minAmount": 0, "maxAmount": 25000 },
+      { "level": 2, "approverRole": "director", "approverTitle": "IT Director", "minAmount": 25000.01, "maxAmount": 250000, "escalationRole": "cfo" },
+      { "level": 3, "approverRole": "cfo", "approverTitle": "Chief Financial Officer", "minAmount": 250000.01, "requiresQuorum": 1 }
+    ]
+  },
+  "procurement-item": {
+    "itemId": "PRC-ITEM-000101",
+    "capexRequestId": "CAPEX-000042",
+    "description": "48-port managed L3 switch",
+    "category": "goods",
+    "quantity": 8,
+    "unitOfMeasure": "each",
+    "estimatedUnitCost": 12000,
+    "currency": "USD",
+    "estimatedTotalCost": 96000,
+    "specifications": { "ports": 48, "layer": 3, "poe": true },
+    "status": "requisitioned"
+  },
+  "purchase-requisition": {
+    "requisitionId": "PR-000501",
+    "title": "Network switch procurement",
+    "requestedBy": "user-neteng-07",
+    "department": "IT",
+    "requisitionDate": "2026-02-01",
+    "requiredByDate": "2026-05-15",
+    "lineItems": [
+      { "procurementItemId": "PRC-ITEM-000101", "quantity": 8, "estimatedUnitCost": 12000 }
+    ],
+    "estimatedTotal": 96000,
+    "currency": "USD",
+    "status": "converted-to-rfq"
+  },
+  "vendor-bidding": {
+    "rfqId": "RFQ-000777",
+    "requisitionId": "PR-000501",
+    "title": "RFQ - L3 switches",
+    "issueDate": "2026-02-05",
+    "closeDate": "2026-02-20",
+    "currency": "USD",
+    "evaluationCriteria": [
+      { "name": "price", "weight": 0.6 },
+      { "name": "lead-time", "weight": 0.2 },
+      { "name": "warranty", "weight": 0.2 }
+    ],
+    "status": "awarded",
+    "bids": [
+      { "vendorId": "V-1001", "vendorName": "NetSupply Co", "totalPrice": 92000, "currency": "USD", "leadTimeDays": 30, "evaluationScore": 88.5, "compliant": true,
+        "lineQuotes": [ { "procurementItemId": "PRC-ITEM-000101", "unitPrice": 11500 } ] },
+      { "vendorId": "V-1002", "vendorName": "CoreGear Ltd", "totalPrice": 98000, "currency": "USD", "leadTimeDays": 21, "evaluationScore": 81.0, "compliant": true }
+    ],
+    "awardedVendorId": "V-1001"
+  },
+  "purchase-order": {
+    "poId": "PO-000900",
+    "rfqId": "RFQ-000777",
+    "requisitionId": "PR-000501",
+    "vendorId": "V-1001",
+    "vendorName": "NetSupply Co",
+    "orderDate": "2026-02-25",
+    "expectedDeliveryDate": "2026-03-27",
+    "lineItems": [
+      { "procurementItemId": "PRC-ITEM-000101", "description": "48-port managed L3 switch", "quantity": 8, "unitPrice": 11500, "lineTotal": 92000, "receivedQuantity": 0 }
+    ],
+    "subtotal": 92000,
+    "taxAmount": 11040,
+    "shippingAmount": 500,
+    "total": 103540,
+    "currency": "USD",
+    "paymentTerms": "net-30",
+    "deliveryTerms": "DDP",
+    "status": "issued"
+  },
+  "project-charter": {
+    "projectId": "PRJ-000010",
+    "charterVersion": 1,
+    "title": "Datacenter Network Modernization",
+    "sponsor": "user-cio-01",
+    "projectManager": "user-pm-03",
+    "objectives": ["Eliminate unsupported hardware", "Improve east-west throughput"],
+    "scope": { "inScope": ["Core switching"], "outOfScope": ["Edge wifi"] },
+    "startDate": "2026-03-01",
+    "plannedEndDate": "2026-07-31",
+    "baselineBudget": 120000,
+    "currency": "USD",
+    "fundingCapexRequestIds": ["CAPEX-000042"],
+    "status": "active"
+  },
+  "milestone-tracker": {
+    "milestoneId": "MS-000031",
+    "projectId": "PRJ-000010",
+    "name": "Hardware delivered & staged",
+    "weight": 0.3,
+    "deliverables": [
+      { "name": "Switches received", "status": "pending", "dueDate": "2026-03-27" }
+    ],
+    "plannedStart": "2026-03-01",
+    "plannedEnd": "2026-03-30",
+    "physicalProgressPercent": 40,
+    "status": "in-progress"
+  },
+  "financial-tracking": {
+    "trackingId": "FT-000205",
+    "projectId": "PRJ-000010",
+    "period": "2026-03",
+    "currency": "USD",
+    "plannedCost": 120000,
+    "committedCost": 103540,
+    "actualCost": 0,
+    "earnedValue": 48000,
+    "forecastAtCompletion": 121000,
+    "costVariance": 48000,
+    "linkedPurchaseOrderIds": ["PO-000900"],
+    "recordedBy": "user-pm-03",
+    "recordedAt": "2026-03-31T17:00:00Z"
+  },
+  "risk-issue-log": {
+    "entryId": "RISK-000012",
+    "projectId": "PRJ-000010",
+    "type": "risk",
+    "title": "Vendor lead time may slip",
+    "description": "Global chip shortage could delay switch delivery.",
+    "category": "procurement",
+    "probability": "possible",
+    "impact": "major",
+    "severity": "high",
+    "status": "monitoring",
+    "owner": "user-pm-03",
+    "mitigationPlan": "Secure alternate vendor V-1002 as backup.",
+    "linkedMilestoneId": "MS-000031",
+    "raisedDate": "2026-02-10",
+    "dueDate": "2026-03-20"
+  }
+}

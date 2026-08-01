@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/purchase-order.schema.json",
+  "title": "Purchase Order",
+  "description": "A finalized, legally binding order issued to a vendor following bid award.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["poId", "vendorId", "orderDate", "lineItems", "currency", "total", "status"],
+  "properties": {
+    "poId": {
+      "type": "string",
+      "pattern": "^PO-[0-9]{6}$",
+      "examples": ["PO-000900"]
+    },
+    "rfqId": {
+      "description": "Source RFQ the award derives from. FK -> procurement-plan/vendor-bidding.rfqId.",
+      "type": "string",
+      "pattern": "^RFQ-[0-9]{6}$"
+    },
+    "requisitionId": {
+      "description": "Originating requisition. FK -> procurement-plan/purchase-requisition.requisitionId.",
+      "type": "string",
+      "pattern": "^PR-[0-9]{6}$"
+    },
+    "vendorId": { "$ref": "#/$defs/nonEmptyString" },
+    "vendorName": { "type": "string" },
+    "orderDate": { "$ref": "#/$defs/date" },
+    "expectedDeliveryDate": { "$ref": "#/$defs/date" },
+    "lineItems": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/poLine" }
+    },
+    "subtotal": { "$ref": "#/$defs/money" },
+    "taxAmount": { "$ref": "#/$defs/money" },
+    "shippingAmount": { "$ref": "#/$defs/money" },
+    "total": { "$ref": "#/$defs/money" },
+    "currency": { "$ref": "#/$defs/currency" },
+    "paymentTerms": {
+      "type": "string",
+      "examples": ["net-30", "net-60", "50-50", "on-delivery"]
+    },
+    "deliveryTerms": {
+      "description": "Incoterms or delivery arrangement.",
+      "type": "string",
+      "examples": ["FOB", "CIF", "DDP", "EXW"]
+    },
+    "status": {
+      "type": "string",
+      "enum": ["issued", "acknowledged", "partially-received", "received", "invoiced", "paid", "closed", "cancelled"]
+    },
+    "createdAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "money": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "poLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["procurementItemId", "quantity", "unitPrice"],
+      "properties": {
+        "procurementItemId": {
+          "description": "FK -> procurement-plan/procurement-item.itemId.",
+          "type": "string",
+          "pattern": "^PRC-ITEM-[0-9]{6}$"
+        },
+        "description": { "type": "string" },
+        "quantity": { "type": "number", "exclusiveMinimum": 0 },
+        "unitPrice": { "$ref": "#/$defs/money" },
+        "lineTotal": { "$ref": "#/$defs/money" },
+        "receivedQuantity": { "type": "number", "minimum": 0, "default": 0 }
+      }
+    }
+  }
+}

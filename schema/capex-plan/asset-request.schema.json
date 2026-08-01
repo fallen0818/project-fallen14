@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/capex-plan/asset-request.schema.json",
+  "title": "Asset Request",
+  "description": "An individual capital-expenditure request for a specific asset, drawn against a capex budget.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["requestId", "budgetId", "title", "assetCategory", "estimatedCost", "currency", "requestedBy", "requestDate", "status"],
+  "properties": {
+    "requestId": {
+      "description": "Unique asset-request identifier. Referenced by procurement items.",
+      "type": "string",
+      "pattern": "^CAPEX-[0-9]{6}$",
+      "examples": ["CAPEX-000042"]
+    },
+    "budgetId": {
+      "description": "Capex budget this request draws down. FK -> capex-budget.budgetId.",
+      "type": "string",
+      "pattern": "^CBUD-[0-9]{4}-[0-9]{4}$"
+    },
+    "title": { "$ref": "#/$defs/nonEmptyString" },
+    "description": { "type": "string" },
+    "assetCategory": {
+      "type": "string",
+      "enum": ["it-infrastructure", "facilities", "machinery-equipment", "vehicles", "software", "research-development", "other"]
+    },
+    "estimatedCost": { "$ref": "#/$defs/money" },
+    "currency": { "$ref": "#/$defs/currency" },
+    "justification": {
+      "description": "Business case for the expenditure.",
+      "type": "string"
+    },
+    "priority": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "critical"],
+      "default": "medium"
+    },
+    "requestedBy": { "$ref": "#/$defs/nonEmptyString" },
+    "requestDate": { "$ref": "#/$defs/date" },
+    "requiredByDate": { "$ref": "#/$defs/date" },
+    "status": {
+      "type": "string",
+      "enum": ["draft", "submitted", "under-review", "approved", "rejected", "cancelled", "procured"]
+    },
+    "approvals": {
+      "description": "Ordered trail of approval decisions, keyed to the approval matrix levels.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/approvalDecision" }
+    },
+    "createdAt": { "$ref": "#/$defs/timestamp" },
+    "updatedAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "nonEmptyString": { "type": "string", "minLength": 1 },
+    "money": { "type": "number", "minimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "approvalDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "approverId", "decision", "decidedAt"],
+      "properties": {
+        "level": {
+          "description": "Authorization level from the approval matrix.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "approverId": { "type": "string", "minLength": 1 },
+        "approverTitle": { "type": "string" },
+        "decision": {
+          "type": "string",
+          "enum": ["approved", "rejected", "delegated"]
+        },
+        "comment": { "type": "string" },
+        "decidedAt": { "type": "string", "format": "date-time" }
+      }
+    }
+  }
+}

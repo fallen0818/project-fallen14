@@ -20,11 +20,11 @@ export async function listRows(
 export async function referenceOptions(
   supabase: SupabaseClient,
   refTable: string,
+  refFilter?: { column: string; value: string },
 ): Promise<Row[]> {
-  const { data, error } = await supabase
-    .from(refTable)
-    .select("*")
-    .order("created_at", { ascending: false });
+  let query = supabase.from(refTable).select("*");
+  if (refFilter) query = query.eq(refFilter.column, refFilter.value);
+  const { data, error } = await query.order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as Row[];
 }
@@ -36,10 +36,14 @@ export async function createRow(
   values: Record<string, unknown>,
   ownerId: string,
 ): Promise<Row> {
-  const code = await config.makeCode(supabase, values);
+  const code = config.makeCode ? await config.makeCode(supabase, values) : undefined;
   const { data, error } = await supabase
     .from(config.table)
-    .insert({ ...clean(writable(config, values)), code, owner_id: ownerId })
+    .insert({
+      ...clean(writable(config, values)),
+      ...(code ? { code } : {}),
+      ...(config.noOwner ? {} : { owner_id: ownerId }),
+    })
     .select()
     .single();
   if (error) throw error;
@@ -72,6 +76,65 @@ export async function deleteRow(
   if (error) throw error;
 }
 
+export type LineRow = Record<string, unknown> & { id?: string };
+
+/**
+ * Fetch a parent row's child "line items" (e.g. a procurement item's bidding
+ * schedule activities). Only meaningful once the parent has an id — a
+ * not-yet-saved new row has no children yet.
+ */
+export async function listLineItems(
+  supabase: SupabaseClient,
+  table: string,
+  parentColumn: string,
+  parentId: string,
+): Promise<LineRow[]> {
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .eq(parentColumn, parentId)
+    .order("created_at", { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as LineRow[];
+}
+
+/**
+ * Reconcile a child "line items" table against its edited state after the
+ * parent row has been saved (so parentId is always known by the time this
+ * runs, even for a brand-new parent). Rows dropped from `current` (present
+ * in `original` but no longer present) are deleted; rows with no `id` yet
+ * are freshly-added lines and get inserted with the parent FK stamped on;
+ * everything else is an update-in-place.
+ */
+export async function saveLineItems(
+  supabase: SupabaseClient,
+  table: string,
+  parentColumn: string,
+  parentId: string,
+  original: LineRow[],
+  current: LineRow[],
+): Promise<void> {
+  const originalIds = new Set(original.map((r) => r.id).filter(Boolean) as string[]);
+  const currentIds = new Set(current.map((r) => r.id).filter(Boolean) as string[]);
+
+  const toDelete = [...originalIds].filter((id) => !currentIds.has(id));
+  if (toDelete.length > 0) {
+    const { error } = await supabase.from(table).delete().in("id", toDelete);
+    if (error) throw error;
+  }
+
+  for (const row of current) {
+    const { id, ...values } = row;
+    if (id) {
+      const { error } = await supabase.from(table).update(clean(values)).eq("id", id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from(table).insert({ ...clean(values), [parentColumn]: parentId });
+      if (error) throw error;
+    }
+  }
+}
+
 /**
  * Keep only writable fields: drop read-only (database-generated) columns and
  * any keys not declared in the entity config. Prevents writes to generated
@@ -92,7 +155,7 @@ function writable(
 }
 
 /** Drop empty-string values so they land as NULL, not "". */
-function clean(values: Record<string, unknown>): Record<string, unknown> {
+export function clean(values: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(values)) {
     out[k] = v === "" ? null : v;

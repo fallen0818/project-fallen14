@@ -32,14 +32,15 @@ src/
 │   └── utils.ts, constants.ts
 └── types/                     # Shared TypeScript types
 supabase/
-├── schema.sql                 # Canonical database schema (24 tables + RLS)
-└── drop-all.sql               # Teardown / reset script
+├── migrations/                 # Source of truth — apply in order (see Setup)
+├── drop-all.sql                # Teardown / reset script
+└── SCHEMA_RESTRUCTURE.md       # Account of the 2026-08 RLS/vendor restructure
 schema/                        # JSON Schema (draft 2020-12) source of the data model
 ```
 
 ## Setup
 
-1. **Create a Supabase project** and run `supabase/schema.sql` in the SQL Editor.
+1. **Create a Supabase project**, then apply the migrations in order: `supabase link --project-ref your-project-ref` followed by `supabase db push` (applies every file in `supabase/migrations/`, 0001 through the latest). To pull a fresh point-in-time `schema.sql` snapshot afterward, run `supabase db dump --schema public -f supabase/schema.sql`.
 2. **Configure env** — copy `.env.example` to `.env.local` and set:
    ```env
    NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
@@ -66,10 +67,10 @@ schema/                        # JSON Schema (draft 2020-12) source of the data 
 
 ## Security model
 
-Row Level Security is the enforcement boundary. Reads require an authenticated session; writes are restricted to the record's owner (`owner_id = auth.uid()`), with child tables gated through their parent's owner. The anon key is safe to expose to the browser because RLS — not key secrecy — protects the data. See `supabase/schema.sql` for the full policy set.
+Row Level Security is the enforcement boundary. Reads require an authenticated session; writes are restricted to the record's owner (`owner_id = auth.uid()`), with child tables gated through their parent's owner via `owns_*()` helper functions. Policies are split per operation (select/insert/update/delete) rather than combined, and `vendors` is a shared reference table (readable/writable by any authenticated user, no owner) rather than owner-scoped. The anon key is safe to expose to the browser because RLS — not key secrecy — protects the data. See `supabase/migrations/` for the full policy set, and `supabase/SCHEMA_RESTRUCTURE.md` for the reasoning behind the current shape.
 
 ## Notes
 
-- The database was reset from the earlier 5-table dashboard to this 24-table model. Run `supabase/drop-all.sql` then `supabase/schema.sql` for a clean slate.
+- The database was reset from the earlier 5-table dashboard to this 24+ table model (now 25, with `vendors`). For a clean slate, run `supabase/drop-all.sql` then `supabase db push` to reapply `supabase/migrations/` from scratch.
 - Human-readable codes (e.g. `CAPEX-000042`, `PO-000900`) are generated automatically on create.
 - Child collections (approval-matrix levels, vendor bids, PO line items, milestone deliverables, charter funding links) exist in the schema and are ready for detail-view editors as a next iteration; the current UI manages the eleven top-level entities and their relationships.

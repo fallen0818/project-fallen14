@@ -7,9 +7,12 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
+  /** Max width of the dialog (default "560px"). Widen for forms with a lot
+   *  of side-by-side content, e.g. a dynamic line-items table. */
+  width?: string;
 }
 
-export function Modal({ open, onClose, title, children }: ModalProps) {
+export function Modal({ open, onClose, title, children, width = "560px" }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -37,7 +40,7 @@ export function Modal({ open, onClose, title, children }: ModalProps) {
       <div
         onClick={(e) => e.stopPropagation()}
         className="card"
-        style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto" }}
+        style={{ width: `min(${width}, 100%)`, maxHeight: "90vh", overflowY: "auto" }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <h3 style={{ fontSize: "1.25rem" }}>{title}</h3>

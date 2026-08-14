@@ -534,9 +534,10 @@ export function BidEvaluationMatrix() {
                             type="button"
                             onClick={() => removeBidder(b.id)}
                             title="Remove bidder"
-                            style={{ background: "none", border: "none", color: "var(--on-surface-variant)", cursor: "pointer", fontSize: "0.7rem", padding: 0 }}
+                            aria-label="Remove bidder"
+                            style={{ background: "none", border: "none", color: "var(--on-surface-variant)", cursor: "pointer", fontSize: "0.95rem", padding: 0, lineHeight: 1 }}
                           >
-                            ✕ remove
+                            🗑️
                           </button>
                         </div>
                       </th>

@@ -70,6 +70,14 @@ export interface LineItemsConfig {
   /** Default values for a newly-added blank line. */
   emptyLine: () => Record<string, unknown>;
   /**
+   * Optional: lines to pre-populate when creating a brand-new parent row
+   * (e.g. a fresh RFQ starts with the usual bid document checklist already
+   * listed, instead of empty). Ignored when editing an existing row — those
+   * load their real saved lines instead. Pre-populated lines have no `id`
+   * yet, so they save as fresh inserts exactly like a manually-added line.
+   */
+  defaultLines?: () => Record<string, unknown>[];
+  /**
    * Optional: lets a saved line be "converted" into a row of another entity
    * (e.g. a Bill of Materials line becomes a Procurement Item once the BOM
    * is approved). `linkColumn` is the column on *this* child table that

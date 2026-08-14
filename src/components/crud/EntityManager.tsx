@@ -105,7 +105,8 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   function openCreate() {
     setEditing(null);
     setForm(defaults(config.fields));
-    setLineItems([]);
+    const seeded = config.lineItems?.defaultLines?.() ?? [];
+    setLineItems(seeded.map((line) => ({ _key: crypto.randomUUID(), ...line })));
     setOriginalLineItems([]);
     setModalOpen(true);
   }

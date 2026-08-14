@@ -44,6 +44,12 @@ export function Sidebar({ email }: { email: string }) {
                 const href = `/${m.key}/${e.key}`;
                 return <NavLink key={href} href={href} label={e.plural} active={pathname === href} nested />;
               })}
+              {/* Bid Evaluation is a bespoke per-bidder matrix, not a generic
+                  config-driven entity, so it isn't picked up by entitiesForModule
+                  -- added here by hand, procurement-only. */}
+              {m.key === "procurement" && (
+                <NavLink href="/bid-evaluation" label="Bid Evaluation" active={pathname === "/bid-evaluation"} nested />
+              )}
             </div>
           </div>
         ))}

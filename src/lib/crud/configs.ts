@@ -294,6 +294,30 @@ export const ENTITIES: EntityConfig[] = [
     ],
   },
   {
+    // Standalone module for the required-documents *template* per RFQ --
+    // which documents bidders must submit, grouped by section (see the
+    // bid-evaluation matrix at /bid-evaluation for the actual per-bidder
+    // Pass/Fail grid, bid offers, and bid security -- this page just manages
+    // the list of required documents each RFQ needs). No owner_id column on
+    // this table -- writes are gated by owns_rfq() via the parent RFQ
+    // instead, see supabase/migrations/0020_rfq_document_checklist.sql and
+    // 0021_bid_evaluation_matrix.sql.
+    key: "rfq-checklist",
+    table: "rfq_document_checklist",
+    singular: "Bid Document Checklist Item",
+    plural: "Bid Documents Checklist",
+    module: "procurement",
+    breadcrumb: "Procurement Plan",
+    primaryField: "document_name",
+    noOwner: true,
+    fields: [
+      { name: "bidding_id", label: "RFQ", type: "reference", refTable: "vendor_biddings", refLabel: codeTitleLabel, required: true, inList: true },
+      { name: "section", label: "Section", type: "text", required: true, placeholder: "e.g. Administrative, Technical, Legal, Financial", inList: true },
+      { name: "document_name", label: "Document Name", type: "text", required: true, placeholder: "e.g. Bid Bond", inList: true },
+      { name: "remarks", label: "Remarks", type: "textarea" },
+    ],
+  },
+  {
     key: "purchase-orders",
     table: "purchase_orders",
     singular: "Purchase Order",

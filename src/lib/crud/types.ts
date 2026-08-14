@@ -69,6 +69,33 @@ export interface LineItemsConfig {
   fields: FieldDef[];
   /** Default values for a newly-added blank line. */
   emptyLine: () => Record<string, unknown>;
+  /**
+   * Optional: lets a saved line be "converted" into a row of another entity
+   * (e.g. a Bill of Materials line becomes a Procurement Item once the BOM
+   * is approved). `linkColumn` is the column on *this* child table that
+   * stores the created row's id, so conversion is idempotent — a line whose
+   * linkColumn is already set is skipped on the next run, and only
+   * already-saved lines (with an `id`) are eligible in the first place.
+   */
+  convertTo?: {
+    /** Key of the target entity in ENTITIES_BY_KEY (e.g. "items"). */
+    entityKey: string;
+    /** Column on the line-items table that stores the created row's id. */
+    linkColumn: string;
+    /** Label for the button that triggers conversion. */
+    buttonLabel: string;
+    /**
+     * Build the new row's values from this line and its parent row. Given
+     * the Supabase client so it can resolve things that aren't on the line
+     * itself, e.g. a sensible default status_id (a lookup_options id can't
+     * be hardcoded here — it's generated per-environment).
+     */
+    mapLine: (
+      line: Record<string, unknown>,
+      parent: Record<string, unknown>,
+      supabase: SupabaseClient,
+    ) => Record<string, unknown> | Promise<Record<string, unknown>>;
+  };
 }
 
 export interface EntityConfig {

@@ -95,6 +95,70 @@ export const ENTITIES: EntityConfig[] = [
       { name: "status_id", label: "Status", type: "reference", ...lookupRef("asset_request_status"), required: true, inList: true, badge: true },
     ],
   },
+  {
+    key: "bom",
+    table: "bill_of_materials",
+    singular: "Bill of Materials",
+    plural: "Bills of Materials",
+    module: "capex",
+    breadcrumb: "Capex Plan",
+    primaryField: "code",
+    makeCode: (sb) => nextSequentialCode(sb, "bill_of_materials", "BOM-", 6),
+    fields: [
+      { name: "asset_request_id", label: "Asset Request", type: "reference", refTable: "asset_requests", refLabel: codeTitleLabel, required: true, inList: true, help: "One BOM per asset request" },
+      { name: "title", label: "Title", type: "text", required: true, inList: true },
+      { name: "status_id", label: "Status", type: "reference", ...lookupRef("bom_status"), required: true, inList: true, badge: true },
+      { name: "prepared_by", label: "Prepared By", type: "text" },
+      { name: "notes", label: "Notes", type: "textarea" },
+    ],
+    // The flat parts list (engineering/spec layer). Each saved line can be
+    // turned into a real Procurement Item — see convertTo below — which
+    // then goes through the existing RFQ/PO flow like any other item.
+    lineItems: {
+      table: "bill_of_materials_lines",
+      parentColumn: "bom_id",
+      label: "Materials / Parts List",
+      addLabel: "+ Add Part",
+      fields: [
+        { name: "part_name", label: "Part / Material", type: "text", required: true, placeholder: "e.g. 24-port Gigabit Switch" },
+        { name: "part_number", label: "Part No.", type: "text" },
+        { name: "category_id", label: "Category", type: "reference", ...lookupRef("procurement_category"), required: true },
+        { name: "quantity", label: "Qty", type: "number", required: true },
+        { name: "unit_of_measure", label: "Unit", type: "text", required: true, placeholder: "each" },
+        { name: "estimated_unit_cost", label: "Est. Unit Cost", type: "currency", help: "Optional at this stage — refined during sourcing" },
+      ],
+      emptyLine: () => ({ part_name: "", part_number: "", category_id: "", quantity: "", unit_of_measure: "", estimated_unit_cost: "" }),
+      convertTo: {
+        entityKey: "items",
+        linkColumn: "procurement_item_id",
+        buttonLabel: "Generate Procurement Items from Parts List",
+        mapLine: async (line, parent, supabase) => {
+          // procurement_item_status is a lookup_options id, generated per
+          // environment — can't hardcode it, so resolve the first status by
+          // code ("Identified", PIST-0001) as the sensible default for a
+          // just-created item.
+          const { data: status } = await supabase
+            .from("lookup_options")
+            .select("id")
+            .eq("list_key", "procurement_item_status")
+            .order("code")
+            .limit(1)
+            .single();
+          const partNumber = line.part_number ? String(line.part_number) : "";
+          return {
+            capex_request_id: parent.asset_request_id,
+            description: partNumber ? `${line.part_name} (${partNumber})` : line.part_name,
+            category_id: line.category_id,
+            quantity: line.quantity,
+            unit_of_measure: line.unit_of_measure,
+            estimated_unit_cost: line.estimated_unit_cost || 0,
+            currency: "PHP",
+            status_id: status?.id,
+          };
+        },
+      },
+    },
+  },
 
   // =========================================================================
   // PROCUREMENT PLAN

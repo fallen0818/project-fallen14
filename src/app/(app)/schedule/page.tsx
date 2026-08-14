@@ -94,7 +94,7 @@ export default async function SchedulePage({
       title: String(r.title ?? "Requisition"),
       start: String(r.requisition_date),
       end: String(r.required_by_date ?? r.requisition_date),
-      status: (r.status as StatusJoin)?.value ?? "—",
+      status: (r.status as unknown as StatusJoin)?.value ?? "—",
     })),
     ...(rfqs.data ?? []).map((r) => ({
       kind: "RFQ" as const,
@@ -102,15 +102,15 @@ export default async function SchedulePage({
       title: String(r.title ?? "Request for Quotation"),
       start: String(r.issue_date),
       end: String(r.close_date ?? r.issue_date),
-      status: (r.status as StatusJoin)?.value ?? "—",
+      status: (r.status as unknown as StatusJoin)?.value ?? "—",
     })),
     ...(pos.data ?? []).map((r) => ({
       kind: "Purchase Order" as const,
       code: String(r.code),
-      title: String((r.vendor as { name: string } | null)?.name ?? (r.contractor as { name: string } | null)?.name ?? "Purchase Order"),
+      title: String((r.vendor as unknown as { name: string } | null)?.name ?? (r.contractor as unknown as { name: string } | null)?.name ?? "Purchase Order"),
       start: String(r.order_date),
       end: String(r.expected_delivery_date ?? r.order_date),
-      status: (r.status as StatusJoin)?.value ?? "—",
+      status: (r.status as unknown as StatusJoin)?.value ?? "—",
     })),
     // Procurement items have no planned-date pair of their own: the bar spans
     // from when the item was identified (created_at) to when its parent
@@ -122,19 +122,19 @@ export default async function SchedulePage({
       code: String(r.code),
       title: String(r.description ?? "Procurement Item"),
       start: String(r.created_at).slice(0, 10),
-      end: String((r.asset_request as { required_by_date: string } | null)?.required_by_date ?? String(r.created_at).slice(0, 10)),
-      status: (r.status as StatusJoin)?.value ?? "—",
+      end: String((r.asset_request as unknown as { required_by_date: string } | null)?.required_by_date ?? String(r.created_at).slice(0, 10)),
+      status: (r.status as unknown as StatusJoin)?.value ?? "—",
     })),
     // Each bidding activity is a single planned date, not a range -- it
     // renders as a one-month-wide marker (start === end) on whichever month
     // that date falls in.
     ...(bidActivities.data ?? []).map((r) => ({
       kind: "Bidding Activity" as const,
-      code: String((r.procurement_item as { code: string } | null)?.code ?? "—"),
+      code: String((r.procurement_item as unknown as { code: string } | null)?.code ?? "—"),
       title: String(r.activity ?? "Bidding Activity"),
       start: String(r.planned_date),
       end: String(r.planned_date),
-      status: (r.status as StatusJoin)?.value ?? "—",
+      status: (r.status as unknown as StatusJoin)?.value ?? "—",
     })),
   ];
 

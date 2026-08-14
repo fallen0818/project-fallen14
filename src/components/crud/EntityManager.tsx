@@ -60,6 +60,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   const [originalLineItems, setOriginalLineItems] = useState<LineRow[]>([]);
   const [lineRefs, setLineRefs] = useState<RefMap>({});
   const [lineItemsLoading, setLineItemsLoading] = useState(false);
+  const [converting, setConverting] = useState(false);
 
   const referenceFields = useMemo(
     () => config.fields.filter((f) => f.type === "reference" && f.refTable),
@@ -146,6 +147,53 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   }
   function removeLineItem(index: number) {
     setLineItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  /**
+   * Turn each not-yet-converted line into a row of another entity (e.g. a
+   * BOM line becomes a Procurement Item) — see LineItemsConfig["convertTo"].
+   * Only already-saved lines (a real `id`) are eligible, so a line added in
+   * this same edit session but not yet Updated is simply skipped for now —
+   * it'll be eligible the next time this runs, after a save.
+   */
+  async function handleConvert() {
+    const lic = config.lineItems;
+    const convertTo = lic?.convertTo;
+    if (!lic || !convertTo || !editing) return;
+
+    const pending = lineItems.filter((l) => l.id && !l[convertTo.linkColumn]);
+    if (pending.length === 0) {
+      showToast(`Nothing to convert — save any new lines first, or every line already has a linked ${ENTITIES_BY_KEY[convertTo.entityKey].singular}`, "info");
+      return;
+    }
+
+    setConverting(true);
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const targetConfig = ENTITIES_BY_KEY[convertTo.entityKey];
+      let createdCount = 0;
+      for (const line of pending) {
+        const values = await convertTo.mapLine(line, editing, supabase);
+        const created = await createRow(supabase, targetConfig, values, user.id);
+        const { error } = await supabase.from(lic.table).update({ [convertTo.linkColumn]: created.id }).eq("id", line.id as string);
+        if (error) throw error;
+        createdCount++;
+      }
+      showToast(`Created ${createdCount} ${createdCount === 1 ? targetConfig.singular : targetConfig.plural}`, "success");
+
+      const refreshed = await listLineItems(supabase, lic.table, lic.parentColumn, editing.id);
+      setOriginalLineItems(refreshed);
+      setLineItems(refreshed.map((r) => ({ ...r, _key: crypto.randomUUID() })));
+    } catch (err) {
+      console.error(`[${lic.table}] convert failed:`, JSON.stringify(err, null, 2));
+      showToast(errorMessage(err), "error");
+    } finally {
+      setConverting(false);
+    }
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -266,7 +314,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         title={editing ? `Edit ${config.singular}` : `New ${config.singular}`}
-        width={config.lineItems ? "900px" : undefined}
+        width={config.lineItems ? `${Math.max(760, config.lineItems.fields.length * 170 + 260)}px` : undefined}
       >
         <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
           {editing && (
@@ -299,6 +347,13 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
               onChange={updateLineItem}
               onRemove={removeLineItem}
             />
+          )}
+          {config.lineItems?.convertTo && editing && (
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <Button type="button" variant="secondary" onClick={handleConvert} disabled={converting}>
+                {converting ? "Converting…" : config.lineItems.convertTo.buttonLabel}
+              </Button>
+            </div>
           )}
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
             <Button type="submit" disabled={saving}>{saving ? "Saving…" : editing ? "Update" : "Create"}</Button>
@@ -413,39 +468,48 @@ function LineItemsEditor({
         </p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-          {lines.map((line, i) => (
-            <div
-              key={line._key}
-              style={{
-                display: "grid",
-                gridTemplateColumns: `repeat(${config.fields.length}, 1fr) auto`,
-                gap: "0.6rem",
-                alignItems: "end",
-                background: "var(--surface-container-low)",
-                padding: "0.6rem",
-                borderRadius: "0.5rem",
-              }}
-            >
-              {config.fields.map((f) => (
-                <FieldInput
-                  key={f.name}
-                  id={`${line._key}-${f.name}`}
-                  field={f}
-                  value={line[f.name]}
-                  options={f.refTable ? refs[f.name] : undefined}
-                  onChange={(v) => onChange(i, f.name, v)}
-                />
-              ))}
-              <Button
-                type="button"
-                variant="danger"
-                onClick={() => onRemove(i)}
-                style={{ padding: "0.55rem 0.7rem", fontSize: "0.78rem", height: "fit-content" }}
-              >
-                Remove
-              </Button>
-            </div>
-          ))}
+          {lines.map((line, i) => {
+            const converted = Boolean(config.convertTo && line[config.convertTo.linkColumn]);
+            return (
+              <div key={line._key}>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: `repeat(${config.fields.length}, 1fr) auto`,
+                    gap: "0.6rem",
+                    alignItems: "end",
+                    background: "var(--surface-container-low)",
+                    padding: "0.6rem",
+                    borderRadius: "0.5rem",
+                  }}
+                >
+                  {config.fields.map((f) => (
+                    <FieldInput
+                      key={f.name}
+                      id={`${line._key}-${f.name}`}
+                      field={f}
+                      value={line[f.name]}
+                      options={f.refTable ? refs[f.name] : undefined}
+                      onChange={(v) => onChange(i, f.name, v)}
+                    />
+                  ))}
+                  <Button
+                    type="button"
+                    variant="danger"
+                    onClick={() => onRemove(i)}
+                    style={{ padding: "0.55rem 0.7rem", fontSize: "0.78rem", height: "fit-content" }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+                {converted && (
+                  <p className="label-sm" style={{ margin: "0.3rem 0 0 0.2rem", textTransform: "none", letterSpacing: 0, color: "var(--tertiary, #2e9e5b)" }}>
+                    ✓ Converted to a {ENTITIES_BY_KEY[config.convertTo!.entityKey].singular}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

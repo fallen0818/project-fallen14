@@ -225,7 +225,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
 
       if (config.lineItems) {
         const payload = lineItems.map(({ _key, ...rest }) => rest);
-        await saveLineItems(supabase, config.lineItems.table, config.lineItems.parentColumn, parentId, originalLineItems, payload);
+        await saveLineItems(supabase, config.lineItems.table, config.lineItems.parentColumn, parentId, config.lineItems.fields, originalLineItems, payload);
       }
 
       showToast(`${config.singular} ${editing ? "updated" : "created"}`, "success");

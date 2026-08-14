@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { EntityConfig } from "./types";
+import type { EntityConfig, FieldDef } from "./types";
 
 export type Row = Record<string, unknown> & { id: string; code?: string };
 
@@ -105,15 +105,30 @@ export async function listLineItems(
  * in `original` but no longer present) are deleted; rows with no `id` yet
  * are freshly-added lines and get inserted with the parent FK stamped on;
  * everything else is an update-in-place.
+ *
+ * `fields` restricts what actually gets written to the columns declared in
+ * the entity's LineItemsConfig. A line fetched via listLineItems() carries
+ * every column the child table has (select "*") -- including ones that
+ * aren't meant to round-trip through a routine save: a generated column
+ * like bill_of_materials_lines.estimated_total_cost (Postgres rejects any
+ * write to it outright, "can only be updated to DEFAULT"), system columns
+ * (created_at/updated_at/the parent FK), or a convertTo linkColumn that's
+ * only ever set by its own dedicated update in handleConvert(). Without
+ * this filter, editing an existing row with lines that already have such
+ * columns populated fails immediately -- a brand-new parent's freshly-added
+ * lines have no `id` and start from emptyLine() (which only sets the
+ * editable columns), so creation looks fine and only editing breaks.
  */
 export async function saveLineItems(
   supabase: SupabaseClient,
   table: string,
   parentColumn: string,
   parentId: string,
+  fields: FieldDef[],
   original: LineRow[],
   current: LineRow[],
 ): Promise<void> {
+  const writableNames = new Set(fields.filter((f) => !f.readOnly).map((f) => f.name));
   const originalIds = new Set(original.map((r) => r.id).filter(Boolean) as string[]);
   const currentIds = new Set(current.map((r) => r.id).filter(Boolean) as string[]);
 
@@ -124,7 +139,11 @@ export async function saveLineItems(
   }
 
   for (const row of current) {
-    const { id, ...values } = row;
+    const { id, ...rest } = row;
+    const values: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(rest)) {
+      if (writableNames.has(k)) values[k] = v;
+    }
     if (id) {
       const { error } = await supabase.from(table).update(clean(values)).eq("id", id);
       if (error) throw error;

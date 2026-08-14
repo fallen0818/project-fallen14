@@ -21,26 +21,45 @@ const groupBy = (rows: Cnt[], key: string) => {
 export default async function DashboardPage() {
   const supabase = await createClient();
 
+  // status/severity moved to lookup_options-backed *_id foreign keys same as
+  // everywhere else in this schema -- these queries embed the referenced
+  // lookup row to get back a human label instead of selecting a plain
+  // "status"/"severity" column that no longer exists (asset_requests and
+  // risk_issue_log migrated in the Part 0 reconstruction; project_charters
+  // and milestones just now, migration 0022 -- see SCHEMA_RESTRUCTURE.md).
+  // Before this fix all three of these queries silently failed (the error
+  // is swallowed by `.data ?? []`), so Asset Requests by Status, Active
+  // Projects, Projects by Status, and Risks by Severity always showed 0/empty
+  // regardless of actual data.
   const [budgets, requests, pos, charters, milestones, risks] = await Promise.all([
     supabase.from("capex_budgets").select("allocated_amount, committed_amount, spent_amount"),
-    supabase.from("asset_requests").select("status"),
+    supabase.from("asset_requests").select("status:lookup_options!status_id(value)"),
     supabase.from("purchase_orders").select("total"),
-    supabase.from("project_charters").select("status"),
+    supabase.from("project_charters").select("status:lookup_options!status_id(value)"),
     supabase.from("milestones").select("physical_progress_percent"),
-    supabase.from("risk_issue_log").select("status, severity"),
+    supabase.from("risk_issue_log").select("status:lookup_options!status_id(value), severity:lookup_options!severity_id(value)"),
   ]);
 
+  type StatusJoin = { value: string } | null;
+
   const budgetRows = budgets.data ?? [];
-  const requestRows = requests.data ?? [];
+  const requestRows = (requests.data ?? []).map((r) => ({
+    status: (r.status as unknown as StatusJoin)?.value ?? "Unknown",
+  }));
   const poRows = pos.data ?? [];
-  const charterRows = charters.data ?? [];
+  const charterRows = (charters.data ?? []).map((r) => ({
+    status: (r.status as unknown as StatusJoin)?.value ?? "Unknown",
+  }));
   const milestoneRows = milestones.data ?? [];
-  const riskRows = risks.data ?? [];
+  const riskRows = (risks.data ?? []).map((r) => ({
+    status: (r.status as unknown as StatusJoin)?.value ?? "Unknown",
+    severity: (r.severity as unknown as StatusJoin)?.value ?? "Unknown",
+  }));
 
   const allocated = sum(budgetRows, "allocated_amount");
   const committed = sum(budgetRows, "committed_amount");
   const poTotal = sum(poRows, "total");
-  const openRisks = riskRows.filter((r) => !["resolved", "closed"].includes(String(r.status))).length;
+  const openRisks = riskRows.filter((r) => !["Resolved", "Closed"].includes(r.status)).length;
   const avgProgress =
     milestoneRows.length > 0
       ? sum(milestoneRows, "physical_progress_percent") / milestoneRows.length
@@ -54,7 +73,7 @@ export default async function DashboardPage() {
         <StatCard accent="var(--primary)" label="Capex Allocated" value={formatCurrency(allocated)} hint={`${budgetRows.length} budgets`} />
         <StatCard accent="var(--secondary)" label="Committed" value={formatCurrency(committed)} hint={allocated > 0 ? `${((committed / allocated) * 100).toFixed(0)}% of allocation` : "—"} />
         <StatCard accent="var(--tertiary)" label="PO Value Issued" value={formatCurrency(poTotal)} hint={`${poRows.length} purchase orders`} />
-        <StatCard accent="var(--success)" label="Active Projects" value={String(charterRows.filter((c) => c.status === "active").length)} hint={`${charterRows.length} total`} />
+        <StatCard accent="var(--success)" label="Active Projects" value={String(charterRows.filter((c) => c.status === "Active").length)} hint={`${charterRows.length} total`} />
         <StatCard accent="var(--warning)" label="Avg Milestone Progress" value={`${avgProgress.toFixed(0)}%`} hint={`${milestoneRows.length} milestones`} />
         <StatCard accent="var(--error)" label="Open Risks/Issues" value={String(openRisks)} hint={`${riskRows.length} logged`} />
       </div>

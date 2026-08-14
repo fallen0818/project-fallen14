@@ -366,7 +366,12 @@ export const ENTITIES: EntityConfig[] = [
       { name: "planned_end_date", label: "Planned End", type: "date", required: true },
       { name: "baseline_budget", label: "Baseline Budget", type: "currency", required: true, inList: true },
       { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
-      { name: "status", label: "Status", type: "select", options: ["proposed", "chartered", "active", "on-hold", "completed", "cancelled"], required: true, inList: true, badge: true },
+      { name: "status_id", label: "Status", type: "reference", ...lookupRef("project_status"), required: true, inList: true, badge: true },
+      // Auto-computed by a trigger on milestones (migration 0022) -- the
+      // share of this project's Milestones ("subtasks") marked Completed.
+      // Never set by hand: recalculates itself whenever a milestone is
+      // added, edited, or removed.
+      { name: "overall_progress_percent", label: "Overall Progress %", type: "number", readOnly: true, inList: true, help: "Auto-computed: completed milestones ÷ total milestones for this project" },
     ],
   },
   {
@@ -382,13 +387,13 @@ export const ENTITIES: EntityConfig[] = [
       { name: "project_id", label: "Project", type: "reference", refTable: "project_charters", refLabel: codeTitleLabel, required: true, inList: true },
       { name: "name", label: "Name", type: "text", required: true, inList: true },
       { name: "description", label: "Description", type: "textarea" },
-      { name: "weight", label: "Weight (0-1)", type: "number", min: 0, max: 1, help: "Share of overall project progress" },
+      { name: "weight", label: "Weight (0-1)", type: "number", min: 0, max: 1, help: "Not currently used by the auto-computed project progress (that's count-based -- see the Project Charter's Overall Progress %); kept for future weighted-progress use." },
       { name: "planned_start", label: "Planned Start", type: "date", required: true },
       { name: "planned_end", label: "Planned End", type: "date", required: true },
       { name: "actual_start", label: "Actual Start", type: "date" },
       { name: "actual_end", label: "Actual End", type: "date" },
       { name: "physical_progress_percent", label: "Progress %", type: "number", min: 0, max: 100, required: true, inList: true },
-      { name: "status", label: "Status", type: "select", options: ["not-started", "in-progress", "at-risk", "delayed", "completed", "cancelled"], required: true, inList: true, badge: true },
+      { name: "status_id", label: "Status", type: "reference", ...lookupRef("milestone_status"), required: true, inList: true, badge: true, help: "Marking this Completed is what counts toward the project's Overall Progress %" },
     ],
   },
   {
@@ -421,17 +426,27 @@ export const ENTITIES: EntityConfig[] = [
     module: "monitoring",
     breadcrumb: "Project Monitoring",
     primaryField: "code",
-    makeCode: (sb, v) => nextSequentialCode(sb, "risk_issue_log", v.type === "issue" ? "ISSUE-" : "RISK-", 6),
+    // Risk vs. Issue picks the code prefix, but type is now a lookup_options
+    // reference (type_id), not a plain "risk"/"issue" string -- resolve the
+    // selected option's label before deciding the prefix.
+    makeCode: async (sb, v) => {
+      let prefix = "RISK-";
+      if (v.type_id) {
+        const { data } = await sb.from("lookup_options").select("value").eq("id", v.type_id as string).single();
+        if (data?.value === "Issue") prefix = "ISSUE-";
+      }
+      return nextSequentialCode(sb, "risk_issue_log", prefix, 6);
+    },
     fields: [
       { name: "project_id", label: "Project", type: "reference", refTable: "project_charters", refLabel: codeTitleLabel, required: true, inList: true },
-      { name: "type", label: "Type", type: "select", options: ["risk", "issue"], required: true, inList: true, badge: true },
+      { name: "type_id", label: "Type", type: "reference", ...lookupRef("risk_type"), required: true, inList: true, badge: true },
       { name: "title", label: "Title", type: "text", required: true, inList: true },
       { name: "description", label: "Description", type: "textarea" },
-      { name: "category", label: "Category", type: "select", options: ["schedule", "cost", "scope", "quality", "resource", "procurement", "technical", "external", "safety"] },
-      { name: "probability", label: "Probability", type: "select", options: ["rare", "unlikely", "possible", "likely", "almost-certain"] },
-      { name: "impact", label: "Impact", type: "select", options: ["negligible", "minor", "moderate", "major", "severe"] },
-      { name: "severity", label: "Severity", type: "select", options: ["low", "medium", "high", "critical"], inList: true, badge: true },
-      { name: "status", label: "Status", type: "select", options: ["open", "mitigating", "monitoring", "escalated", "resolved", "closed"], required: true, inList: true, badge: true },
+      { name: "category_id", label: "Category", type: "reference", ...lookupRef("risk_category") },
+      { name: "probability_id", label: "Probability", type: "reference", ...lookupRef("risk_probability") },
+      { name: "impact_id", label: "Impact", type: "reference", ...lookupRef("risk_impact") },
+      { name: "severity_id", label: "Severity", type: "reference", ...lookupRef("risk_severity"), inList: true, badge: true },
+      { name: "status_id", label: "Status", type: "reference", ...lookupRef("risk_status"), required: true, inList: true, badge: true },
       { name: "owner", label: "Owner", type: "text" },
       { name: "mitigation_plan", label: "Mitigation Plan", type: "textarea" },
       { name: "contingency_plan", label: "Contingency Plan", type: "textarea" },

@@ -96,7 +96,12 @@ export const ENTITIES: EntityConfig[] = [
       // list). A second, independently-set Category on the request itself
       // just duplicated that taxonomy; dropped in migration 0023 along with
       // the asset_category_id column.
-      { name: "estimated_cost", label: "Estimated Cost", type: "currency", required: true, inList: true },
+      // Set by hand at request time; once a Bill of Materials is linked
+      // (see the "bom" entity below), its auto-computed Estimated Total
+      // overwrites this field every time the parts list changes (migration
+      // 0034) -- editing it here still works, but only until the BOM's
+      // total next recomputes.
+      { name: "estimated_cost", label: "Estimated Cost", type: "currency", required: true, inList: true, help: "Auto-follows the linked Bill of Materials' Estimated Total once one exists" },
       { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
       { name: "funding_source_id", label: "Funding Source", type: "reference", ...lookupRef("funding_source"), inList: true },
       { name: "justification", label: "Justification", type: "textarea" },

@@ -38,6 +38,16 @@ export interface FieldDef {
   defaultValue?: unknown;
   /** Computed by the database (generated column). Shown but never submitted. */
   readOnly?: boolean;
+  /**
+   * For a readOnly field: derive its displayed value live from the other
+   * fields on the same row, instead of showing the row's persisted value.
+   * Meant for a line-item field whose real value is a DB-generated column
+   * (e.g. bill_of_materials_lines.estimated_total_cost = quantity *
+   * estimated_unit_cost) — the generated value isn't known until after save,
+   * but a live preview while editing is worth more than "Auto-calculated on
+   * save" for a plain multiplication the client can just as well do itself.
+   */
+  compute?: (row: Record<string, unknown>) => unknown;
   /** Show in the list table (default: false). */
   inList?: boolean;
   /** Render as a status/priority badge in the list. */
@@ -65,10 +75,25 @@ export interface LineItemsConfig {
   label: string;
   /** Button label for adding a new blank line (default: "+ Add line"). */
   addLabel?: string;
-  /** Columns editable per line. Reuses FieldDef; readOnly/refFilter/badge are ignored here. */
+  /**
+   * Columns editable per line. Reuses FieldDef; `badge` is ignored (line
+   * items never render as a table row). `readOnly` (optionally paired with
+   * `compute`) shows a disabled display box instead of an input, same idea
+   * as the top-level form's ReadOnlyField.
+   */
   fields: FieldDef[];
   /** Default values for a newly-added blank line. */
   emptyLine: () => Record<string, unknown>;
+  /**
+   * Optional: name of a field (in `fields`, typically `readOnly` with a
+   * `compute`) whose value, summed across every line, is shown as a total
+   * beneath the list — e.g. a BOM's per-line Extended Cost rolled up into an
+   * overall estimated total. Omit for line items with nothing worth totaling
+   * (e.g. a bidding schedule's activities).
+   */
+  totalField?: string;
+  /** Label for the totalField sum (default: "Total"). */
+  totalLabel?: string;
   /**
    * Optional: lines to pre-populate when creating a brand-new parent row
    * (e.g. a fresh RFQ starts with the usual bid document checklist already

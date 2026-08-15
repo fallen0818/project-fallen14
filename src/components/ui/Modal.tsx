@@ -7,12 +7,12 @@ interface ModalProps {
   onClose: () => void;
   title: string;
   children: ReactNode;
-  /** Max width of the dialog (default "560px"). Widen for forms with a lot
+  /** Max width of the dialog (default "720px"). Widen for forms with a lot
    *  of side-by-side content, e.g. a dynamic line-items table. */
   width?: string;
 }
 
-export function Modal({ open, onClose, title, children, width = "560px" }: ModalProps) {
+export function Modal({ open, onClose, title, children, width = "720px" }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();

@@ -16,6 +16,15 @@ import { escapeCsvValue, downloadFile } from "@/lib/utils";
  * -like matrix, not a generic list+modal, so this is a bespoke page rather
  * than another entity in the CRUD engine (see supabase/migrations/
  * 0021_bid_evaluation_matrix.sql for the schema this reads/writes).
+ *
+ * Per-item bidder pricing: an RFQ's procurement items are attached one level
+ * up, on its Requisition (the "requisitions" entity's own line-items list,
+ * backed by purchase_requisition_lines — see configs.ts). This page only
+ * *displays* those items, one row per item, with an editable unit price per
+ * bidder (vendor_bid_line_quotes). Adding/removing which items are on the
+ * RFQ happens on the Requisition itself, not here — keeps a single place
+ * that owns "what items does this procurement cover" instead of letting the
+ * RFQ and the requisition drift out of sync with each other.
  */
 
 interface RfqOption {
@@ -23,6 +32,7 @@ interface RfqOption {
   code: string;
   title: string | null;
   currency: string | null;
+  requisition_id: string;
 }
 
 interface NameOption {
@@ -37,6 +47,10 @@ interface BidderRow {
   name: string;
   total_price: number | null;
   bid_security_amount: number | null;
+  warranty_value: number | null;
+  warranty_unit: string | null;
+  delivery_value: number | null;
+  delivery_unit: string | null;
 }
 
 interface ChecklistItemRow {
@@ -44,6 +58,22 @@ interface ChecklistItemRow {
   section: string;
   document_name: string;
   remarks: string | null;
+}
+
+// A procurement item attached to the RFQ's requisition (via
+// purchase_requisition_lines, managed on the Requisitions module), shown
+// here so bidders can be compared line-by-line on unit price.
+interface RfqItemRow {
+  procurement_item_id: string;
+  code: string;
+  description: string;
+  unit_of_measure: string;
+  quantity: number;
+  // The requisition line's own estimated_unit_cost if set, else the
+  // procurement item's own estimated_unit_cost -- a baseline to size up
+  // bidder quotes against, so it's rarely left blank/"—" even when no one's
+  // refined the line-level estimate yet during sourcing.
+  estimated_unit_cost: number | null;
 }
 
 const SECTION_SUGGESTIONS = ["Technical", "Legal", "Financial"];
@@ -80,6 +110,10 @@ function resultKey(checklistItemId: string, vendorBidId: string): string {
   return `${checklistItemId}:${vendorBidId}`;
 }
 
+function quoteKey(procurementItemId: string, vendorBidId: string): string {
+  return `${procurementItemId}:${vendorBidId}`;
+}
+
 function errorMessage(err: unknown): string {
   if (err && typeof err === "object") {
     const e = err as { message?: string; details?: string; hint?: string };
@@ -103,6 +137,13 @@ function parseAmount(text: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+/** Plain numeric display for small counts like warranty/delivery duration
+ *  (e.g. "2" or "1.5") -- no forced decimals or thousands separators, unlike
+ *  the currency-formatted amounts above. */
+function formatDuration(value: number | null): string {
+  return value === null || Number.isNaN(value) ? "" : String(value);
+}
+
 export function BidEvaluationMatrix() {
   const supabase = createClient();
   const showToast = useToast();
@@ -119,6 +160,14 @@ export function BidEvaluationMatrix() {
   const [bidders, setBidders] = useState<BidderRow[]>([]);
   const [checklistItems, setChecklistItems] = useState<ChecklistItemRow[]>([]);
   const [results, setResults] = useState<Map<string, boolean>>(new Map());
+  const [rfqItems, setRfqItems] = useState<RfqItemRow[]>([]);
+  const [quotes, setQuotes] = useState<Map<string, number>>(new Map());
+  // requisition_id -> procurement item descriptions covered by it -- the
+  // human-readable "subject" of an RFQ (what's actually being bid on), since
+  // an RFQ's own code/title tells a bidder on the Zoom call nothing. Keyed
+  // by requisition rather than RFQ id since that's what the join produces
+  // directly; every RFQ's own requisition_id looks this up.
+  const [subjectsByRequisition, setSubjectsByRequisition] = useState<Map<string, string[]>>(new Map());
 
   const [addBidderChoice, setAddBidderChoice] = useState("");
   const [newSection, setNewSection] = useState("");
@@ -128,16 +177,36 @@ export function BidEvaluationMatrix() {
     (async () => {
       try {
         const [rfqRes, vendorRes, contractorRes] = await Promise.all([
-          supabase.from("vendor_biddings").select("id, code, title, currency").order("code"),
+          supabase.from("vendor_biddings").select("id, code, title, currency, requisition_id").order("code"),
           supabase.from("vendors").select("id, name").order("name"),
           supabase.from("contractors").select("id, name").order("name"),
         ]);
         if (rfqRes.error) throw rfqRes.error;
         if (vendorRes.error) throw vendorRes.error;
         if (contractorRes.error) throw contractorRes.error;
-        setRfqs((rfqRes.data ?? []) as RfqOption[]);
+        const rfqRows = (rfqRes.data ?? []) as RfqOption[];
+        setRfqs(rfqRows);
         setAllVendors((vendorRes.data ?? []) as NameOption[]);
         setAllContractors((contractorRes.data ?? []) as NameOption[]);
+
+        const requisitionIds = Array.from(new Set(rfqRows.map((r) => r.requisition_id)));
+        if (requisitionIds.length > 0) {
+          const { data: lineData, error: lineErr } = await supabase
+            .from("purchase_requisition_lines")
+            .select("requisition_id, procurement_item:procurement_items(description)")
+            .in("requisition_id", requisitionIds);
+          if (lineErr) throw lineErr;
+          type DescJoin = { description: string } | null;
+          const subjectMap = new Map<string, string[]>();
+          for (const row of lineData ?? []) {
+            const raw = row as Record<string, unknown>;
+            const rid = String(raw.requisition_id);
+            const description = (raw.procurement_item as unknown as DescJoin)?.description;
+            if (!description) continue;
+            subjectMap.set(rid, [...(subjectMap.get(rid) ?? []), description]);
+          }
+          setSubjectsByRequisition(subjectMap);
+        }
       } catch (err) {
         showToast(errorMessage(err), "error");
       } finally {
@@ -147,14 +216,25 @@ export function BidEvaluationMatrix() {
     })();
   }, []);
 
+  /** "Supply of 50 Laptops, Networking Cables +1 more" -- what to actually
+   *  read out on the call, since an RFQ code means nothing to a bidder. */
+  function subjectFor(requisitionId: string | undefined): string {
+    const items = requisitionId ? (subjectsByRequisition.get(requisitionId) ?? []) : [];
+    if (items.length === 0) return "";
+    if (items.length <= 2) return items.join(", ");
+    return `${items.slice(0, 2).join(", ")} +${items.length - 2} more`;
+  }
+
   const loadMatrix = useCallback(
-    async (rfqId: string) => {
+    async (rfqId: string, requisitionId?: string) => {
       setLoadingMatrix(true);
       try {
-        const [bidRes, itemRes] = await Promise.all([
+        const [bidRes, itemRes, rfqItemRes] = await Promise.all([
           supabase
             .from("vendor_bids")
-            .select("id, vendor_id, contractor_id, total_price, bid_security_amount, vendor:vendors(name), contractor:contractors(name)")
+            .select(
+              "id, vendor_id, contractor_id, total_price, bid_security_amount, warranty_value, warranty_unit, delivery_value, delivery_unit, vendor:vendors(name), contractor:contractors(name)",
+            )
             .eq("bidding_id", rfqId)
             .order("created_at"),
           supabase
@@ -162,9 +242,16 @@ export function BidEvaluationMatrix() {
             .select("id, section, document_name, remarks")
             .eq("bidding_id", rfqId)
             .order("created_at"),
+          requisitionId
+            ? supabase
+                .from("purchase_requisition_lines")
+                .select("procurement_item_id, quantity, estimated_unit_cost, procurement_item:procurement_items(code, description, unit_of_measure, estimated_unit_cost)")
+                .eq("requisition_id", requisitionId)
+            : Promise.resolve({ data: [] as Record<string, unknown>[], error: null }),
         ]);
         if (bidRes.error) throw bidRes.error;
         if (itemRes.error) throw itemRes.error;
+        if (rfqItemRes.error) throw rfqItemRes.error;
 
         type NameJoin = { name: string } | null;
         const bidderRows: BidderRow[] = (bidRes.data ?? []).map((r) => ({
@@ -177,10 +264,32 @@ export function BidEvaluationMatrix() {
             "Unnamed Bidder",
           total_price: r.total_price === null ? null : Number(r.total_price),
           bid_security_amount: r.bid_security_amount === null ? null : Number(r.bid_security_amount),
+          warranty_value: r.warranty_value === null ? null : Number(r.warranty_value),
+          warranty_unit: (r.warranty_unit as string | null) ?? null,
+          delivery_value: r.delivery_value === null ? null : Number(r.delivery_value),
+          delivery_unit: (r.delivery_unit as string | null) ?? null,
         }));
         const items = (itemRes.data ?? []) as ChecklistItemRow[];
 
+        type ProcItemJoin = { code: string; description: string; unit_of_measure: string; estimated_unit_cost: number | null } | null;
+        const rfqItemRows: RfqItemRow[] = (rfqItemRes.data ?? []).map((r) => {
+          const raw = r as Record<string, unknown>;
+          const p = raw.procurement_item as unknown as ProcItemJoin;
+          const lineCost = raw.estimated_unit_cost;
+          const itemCost = p?.estimated_unit_cost;
+          return {
+            procurement_item_id: String(raw.procurement_item_id),
+            code: p?.code ?? "",
+            description: p?.description ?? "",
+            unit_of_measure: p?.unit_of_measure ?? "",
+            quantity: Number(raw.quantity),
+            estimated_unit_cost: lineCost != null ? Number(lineCost) : itemCost != null ? Number(itemCost) : null,
+          };
+        });
+
         const itemIds = items.map((i) => i.id);
+        const bidIds = bidderRows.map((b) => b.id);
+
         let resultMap = new Map<string, boolean>();
         if (itemIds.length > 0) {
           const { data: resData, error: resErr } = await supabase
@@ -196,9 +305,26 @@ export function BidEvaluationMatrix() {
           );
         }
 
+        let quoteMap = new Map<string, number>();
+        if (bidIds.length > 0) {
+          const { data: quoteData, error: quoteErr } = await supabase
+            .from("vendor_bid_line_quotes")
+            .select("bid_id, procurement_item_id, unit_price")
+            .in("bid_id", bidIds);
+          if (quoteErr) throw quoteErr;
+          quoteMap = new Map(
+            (quoteData ?? []).map((r) => [
+              quoteKey(String(r.procurement_item_id), String(r.bid_id)),
+              Number(r.unit_price),
+            ]),
+          );
+        }
+
         setBidders(bidderRows);
         setChecklistItems(items);
         setResults(resultMap);
+        setRfqItems(rfqItemRows);
+        setQuotes(quoteMap);
       } catch (err) {
         showToast(errorMessage(err), "error");
       } finally {
@@ -211,13 +337,16 @@ export function BidEvaluationMatrix() {
 
   useEffect(() => {
     if (selectedRfqId) {
-      loadMatrix(selectedRfqId);
+      const requisitionId = rfqs.find((r) => r.id === selectedRfqId)?.requisition_id;
+      loadMatrix(selectedRfqId, requisitionId);
     } else {
       setBidders([]);
       setChecklistItems([]);
       setResults(new Map());
+      setRfqItems([]);
+      setQuotes(new Map());
     }
-  }, [selectedRfqId, loadMatrix]);
+  }, [selectedRfqId, loadMatrix, rfqs]);
 
   const selectedRfq = rfqs.find((r) => r.id === selectedRfqId);
 
@@ -233,7 +362,9 @@ export function BidEvaluationMatrix() {
       const { data, error } = await supabase
         .from("vendor_bids")
         .insert(payload)
-        .select("id, vendor_id, contractor_id, total_price, bid_security_amount, vendor:vendors(name), contractor:contractors(name)")
+        .select(
+          "id, vendor_id, contractor_id, total_price, bid_security_amount, warranty_value, warranty_unit, delivery_value, delivery_unit, vendor:vendors(name), contractor:contractors(name)",
+        )
         .single();
       if (error) throw error;
       type NameJoin = { name: string } | null;
@@ -243,6 +374,10 @@ export function BidEvaluationMatrix() {
         contractor_id: string | null;
         total_price: number | null;
         bid_security_amount: number | null;
+        warranty_value: number | null;
+        warranty_unit: string | null;
+        delivery_value: number | null;
+        delivery_unit: string | null;
         vendor: unknown;
         contractor: unknown;
       };
@@ -255,6 +390,10 @@ export function BidEvaluationMatrix() {
           name: (row.vendor as unknown as NameJoin)?.name ?? (row.contractor as unknown as NameJoin)?.name ?? "Unnamed Bidder",
           total_price: row.total_price === null ? null : Number(row.total_price),
           bid_security_amount: row.bid_security_amount === null ? null : Number(row.bid_security_amount),
+          warranty_value: row.warranty_value === null ? null : Number(row.warranty_value),
+          warranty_unit: row.warranty_unit ?? null,
+          delivery_value: row.delivery_value === null ? null : Number(row.delivery_value),
+          delivery_unit: row.delivery_unit ?? null,
         },
       ]);
       setAddBidderChoice("");
@@ -269,12 +408,19 @@ export function BidEvaluationMatrix() {
   }
 
   async function removeBidder(bidderId: string) {
-    if (!confirm("Remove this bidder? This also clears their Pass/Fail marks and bid amounts.")) return;
+    if (!confirm("Remove this bidder? This also clears their Pass/Fail marks, bid amounts, and item price quotes.")) return;
     try {
       const { error } = await supabase.from("vendor_bids").delete().eq("id", bidderId);
       if (error) throw error;
       setBidders((prev) => prev.filter((b) => b.id !== bidderId));
       setResults((prev) => {
+        const next = new Map(prev);
+        for (const key of Array.from(next.keys())) {
+          if (key.endsWith(`:${bidderId}`)) next.delete(key);
+        }
+        return next;
+      });
+      setQuotes((prev) => {
         const next = new Map(prev);
         for (const key of Array.from(next.keys())) {
           if (key.endsWith(`:${bidderId}`)) next.delete(key);
@@ -289,6 +435,27 @@ export function BidEvaluationMatrix() {
   async function saveBidderAmount(bidderId: string, field: "total_price" | "bid_security_amount", value: number | null) {
     try {
       const { error } = await supabase.from("vendor_bids").update({ [field]: value }).eq("id", bidderId);
+      if (error) throw error;
+    } catch (err) {
+      showToast(errorMessage(err), "error");
+    }
+  }
+
+  /** Warranty and delivery schedule are value+unit pairs (e.g. "2 years",
+   *  "45 days") -- saved together so the unit is never left out of sync with
+   *  the value, whichever of the pair the bidder actually edited. */
+  async function saveBidderPair(
+    bidderId: string,
+    valueField: "warranty_value" | "delivery_value",
+    unitField: "warranty_unit" | "delivery_unit",
+    value: number | null,
+    unit: string | null,
+  ) {
+    try {
+      const { error } = await supabase
+        .from("vendor_bids")
+        .update({ [valueField]: value, [unitField]: unit })
+        .eq("id", bidderId);
       if (error) throw error;
     } catch (err) {
       showToast(errorMessage(err), "error");
@@ -357,6 +524,60 @@ export function BidEvaluationMatrix() {
     }
   }
 
+  async function saveQuote(procurementItemId: string, vendorBidId: string, unitPrice: number | null) {
+    const key = quoteKey(procurementItemId, vendorBidId);
+    const prevValue = quotes.get(key);
+    setQuotes((prev) => {
+      const next = new Map(prev);
+      if (unitPrice === null) next.delete(key);
+      else next.set(key, unitPrice);
+      return next;
+    });
+    try {
+      if (unitPrice === null) {
+        const { error } = await supabase
+          .from("vendor_bid_line_quotes")
+          .delete()
+          .eq("bid_id", vendorBidId)
+          .eq("procurement_item_id", procurementItemId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("vendor_bid_line_quotes")
+          .upsert(
+            { bid_id: vendorBidId, procurement_item_id: procurementItemId, unit_price: unitPrice },
+            { onConflict: "bid_id,procurement_item_id" },
+          );
+        if (error) throw error;
+      }
+    } catch (err) {
+      setQuotes((prev) => {
+        const next = new Map(prev);
+        if (prevValue === undefined) next.delete(key);
+        else next.set(key, prevValue);
+        return next;
+      });
+      showToast(errorMessage(err), "error");
+    }
+  }
+
+  function bidderItemsTotal(bidderId: string): number {
+    return rfqItems.reduce((sum, item) => {
+      const price = quotes.get(quoteKey(item.procurement_item_id, bidderId));
+      return sum + (price !== undefined ? price * item.quantity : 0);
+    }, 0);
+  }
+
+  /** Baseline total cost of the RFQ's procurement items (quantity × estimated
+   *  unit cost, before any bids come in) -- what each bidder's Computed Total
+   *  gets sized up against. */
+  function estimatedItemsTotal(): number {
+    return rfqItems.reduce(
+      (sum, item) => sum + (item.estimated_unit_cost != null ? item.quantity * item.estimated_unit_cost : 0),
+      0,
+    );
+  }
+
   async function loadStandardTemplate() {
     if (!selectedRfqId) return;
     setLoadingTemplate(true);
@@ -391,6 +612,30 @@ export function BidEvaluationMatrix() {
     lines.push(["", "", ...blankBidderCells, ""]);
     lines.push(["", "Bid offer, Php", ...bidders.map((b) => (b.total_price != null ? String(b.total_price) : "")), ""]);
     lines.push(["", "Bid security, Php", ...bidders.map((b) => (b.bid_security_amount != null ? String(b.bid_security_amount) : "")), ""]);
+    lines.push([
+      "",
+      "Warranty",
+      ...bidders.map((b) => (b.warranty_value != null ? `${b.warranty_value} ${b.warranty_unit === "months" ? "mo(s)" : "yr(s)"}` : "")),
+      "",
+    ]);
+    lines.push([
+      "",
+      "Delivery schedule",
+      ...bidders.map((b) => (b.delivery_value != null ? `${b.delivery_value} ${b.delivery_unit === "months" ? "mo(s)" : "day(s)"}` : "")),
+      "",
+    ]);
+    if (rfqItems.length > 0) {
+      lines.push(["", "", ...blankBidderCells, ""]);
+      lines.push(["Item Price Quotes", "", ...blankBidderCells, ""]);
+      lines.push(["Item", "Qty", ...bidderNames.map(() => "Unit Price"), ""]);
+      for (const item of rfqItems) {
+        const prices = bidders.map((b) => {
+          const v = quotes.get(quoteKey(item.procurement_item_id, b.id));
+          return v !== undefined ? String(v) : "";
+        });
+        lines.push([`${item.code} ${item.description}`.trim(), String(item.quantity), ...prices, ""]);
+      }
+    }
     const csv = lines.map((row) => row.map(escapeCsvValue).join(",")).join("\n");
     downloadFile(csv, `bid-evaluation-${selectedRfq.code}.csv`);
   }
@@ -420,12 +665,16 @@ export function BidEvaluationMatrix() {
               disabled={loadingRfqs}
             >
               <option value="">{loadingRfqs ? "Loading RFQs…" : "Select an RFQ…"}</option>
-              {rfqs.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.code}
-                  {r.title ? ` · ${r.title}` : ""}
-                </option>
-              ))}
+              {rfqs.map((r) => {
+                const subject = subjectFor(r.requisition_id);
+                return (
+                  <option key={r.id} value={r.id}>
+                    {r.code}
+                    {r.title ? ` · ${r.title}` : ""}
+                    {subject ? ` — ${subject}` : ""}
+                  </option>
+                );
+              })}
             </select>
             {selectedRfqId && (
               <Button variant="secondary" onClick={exportCsv} disabled={checklistItems.length === 0}>
@@ -435,6 +684,14 @@ export function BidEvaluationMatrix() {
           </div>
         }
       />
+
+      {selectedRfqId && (
+        <p className="label-sm" style={{ textTransform: "none", letterSpacing: 0, margin: "-0.5rem 0 1rem", color: "var(--on-surface-variant)" }}>
+          Subject: <span style={{ fontWeight: 600, color: "var(--on-surface)" }}>
+            {subjectFor(selectedRfq?.requisition_id) || "No procurement items attached to this RFQ's requisition yet"}
+          </span>
+        </p>
+      )}
 
       {!selectedRfqId ? (
         <div className="card" style={{ textAlign: "center", color: "var(--on-surface-variant)" }}>
@@ -673,10 +930,184 @@ export function BidEvaluationMatrix() {
                       ))}
                       <td />
                     </tr>
+                    <tr>
+                      <td colSpan={2} style={{ padding: "0.6rem 0.75rem", fontWeight: 700 }}>Warranty</td>
+                      {bidders.map((b) => (
+                        <td key={b.id} style={{ padding: "0.4rem 0.5rem" }}>
+                          <div style={{ display: "flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="input"
+                              style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right", width: 60 }}
+                              defaultValue={formatDuration(b.warranty_value)}
+                              onFocus={(e) => {
+                                e.target.value = b.warranty_value === null ? "" : String(b.warranty_value);
+                              }}
+                              onBlur={(e) => {
+                                const parsed = parseAmount(e.target.value);
+                                e.target.value = formatDuration(parsed);
+                                if (parsed !== b.warranty_value) {
+                                  const unit = b.warranty_unit ?? "years";
+                                  setBidders((prev) =>
+                                    prev.map((x) => (x.id === b.id ? { ...x, warranty_value: parsed, warranty_unit: unit } : x)),
+                                  );
+                                  saveBidderPair(b.id, "warranty_value", "warranty_unit", parsed, unit);
+                                }
+                              }}
+                            />
+                            <select
+                              className="select"
+                              style={{ padding: "0.3rem 0.35rem", fontSize: "0.78rem", width: "auto" }}
+                              value={b.warranty_unit ?? "years"}
+                              onChange={(e) => {
+                                const unit = e.target.value;
+                                setBidders((prev) => prev.map((x) => (x.id === b.id ? { ...x, warranty_unit: unit } : x)));
+                                saveBidderPair(b.id, "warranty_value", "warranty_unit", b.warranty_value, unit);
+                              }}
+                            >
+                              <option value="years">yrs</option>
+                              <option value="months">mos</option>
+                            </select>
+                          </div>
+                        </td>
+                      ))}
+                      <td />
+                    </tr>
+                    <tr>
+                      <td colSpan={2} style={{ padding: "0.6rem 0.75rem", fontWeight: 700 }}>Delivery Schedule</td>
+                      {bidders.map((b) => (
+                        <td key={b.id} style={{ padding: "0.4rem 0.5rem" }}>
+                          <div style={{ display: "flex", gap: "0.3rem", alignItems: "center", justifyContent: "flex-end" }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="input"
+                              style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right", width: 60 }}
+                              defaultValue={formatDuration(b.delivery_value)}
+                              onFocus={(e) => {
+                                e.target.value = b.delivery_value === null ? "" : String(b.delivery_value);
+                              }}
+                              onBlur={(e) => {
+                                const parsed = parseAmount(e.target.value);
+                                e.target.value = formatDuration(parsed);
+                                if (parsed !== b.delivery_value) {
+                                  const unit = b.delivery_unit ?? "days";
+                                  setBidders((prev) =>
+                                    prev.map((x) => (x.id === b.id ? { ...x, delivery_value: parsed, delivery_unit: unit } : x)),
+                                  );
+                                  saveBidderPair(b.id, "delivery_value", "delivery_unit", parsed, unit);
+                                }
+                              }}
+                            />
+                            <select
+                              className="select"
+                              style={{ padding: "0.3rem 0.35rem", fontSize: "0.78rem", width: "auto" }}
+                              value={b.delivery_unit ?? "days"}
+                              onChange={(e) => {
+                                const unit = e.target.value;
+                                setBidders((prev) => prev.map((x) => (x.id === b.id ? { ...x, delivery_unit: unit } : x)));
+                                saveBidderPair(b.id, "delivery_value", "delivery_unit", b.delivery_value, unit);
+                              }}
+                            >
+                              <option value="days">days</option>
+                              <option value="months">mos</option>
+                            </select>
+                          </div>
+                        </td>
+                      ))}
+                      <td />
+                    </tr>
                   </tfoot>
                 )}
               </table>
             </div>
+          </div>
+
+          <div className="card" style={{ padding: "1rem", overflowX: "auto", marginTop: "1rem" }}>
+            <h4 style={{ margin: "0 0 0.75rem" }}>Item Price Quotes</h4>
+            {rfqItems.length === 0 ? (
+              <p className="label-sm" style={{ textTransform: "none", letterSpacing: 0, color: "var(--on-surface-variant)" }}>
+                This RFQ&apos;s requisition has no procurement items attached yet. Add them from the Requisition&apos;s own Procurement Items list, and they&apos;ll show up here for pricing.
+              </p>
+            ) : (
+              <div style={{ minWidth: 420 + bidders.length * 130 }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                  <thead>
+                    <tr>
+                      <th className="label-sm" style={{ textAlign: "left", padding: "0.6rem 0.75rem" }}>Item</th>
+                      <th className="label-sm" style={{ textAlign: "right", padding: "0.6rem 0.75rem" }}>Qty</th>
+                      <th className="label-sm" style={{ textAlign: "right", padding: "0.6rem 0.75rem" }}>Est. Cost</th>
+                      {bidders.map((b) => (
+                        <th key={b.id} className="label-sm" style={{ textAlign: "center", padding: "0.6rem 0.5rem" }}>
+                          {b.name}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rfqItems.map((item) => (
+                      <tr key={item.procurement_item_id} style={{ borderTop: "1px solid var(--surface-container-high)" }}>
+                        <td style={{ padding: "0.5rem 0.75rem" }}>
+                          <div style={{ fontWeight: 600 }}>{item.code}</div>
+                          <div style={{ color: "var(--on-surface-variant)", fontSize: "0.78rem" }}>{item.description}</div>
+                        </td>
+                        <td style={{ padding: "0.5rem 0.75rem", textAlign: "right" }}>
+                          {item.quantity} {item.unit_of_measure}
+                        </td>
+                        <td style={{ padding: "0.5rem 0.75rem", textAlign: "right", color: "var(--on-surface-variant)" }}>
+                          {item.estimated_unit_cost != null ? formatAmount(item.quantity * item.estimated_unit_cost) : "—"}
+                        </td>
+                        {bidders.map((b) => (
+                          <td key={b.id} style={{ padding: "0.4rem 0.5rem" }}>
+                            <input
+                              type="text"
+                              inputMode="decimal"
+                              className="input"
+                              style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right", width: 100 }}
+                              defaultValue={formatAmount(quotes.get(quoteKey(item.procurement_item_id, b.id)) ?? null)}
+                              onFocus={(e) => {
+                                const v = quotes.get(quoteKey(item.procurement_item_id, b.id));
+                                e.target.value = v === undefined ? "" : String(v);
+                              }}
+                              onBlur={(e) => {
+                                const parsed = parseAmount(e.target.value);
+                                e.target.value = formatAmount(parsed);
+                                const current = quotes.get(quoteKey(item.procurement_item_id, b.id)) ?? null;
+                                if (parsed !== current) saveQuote(item.procurement_item_id, b.id, parsed);
+                              }}
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ borderTop: "2px solid var(--outline-variant)" }}>
+                      <td colSpan={2} style={{ padding: "0.6rem 0.75rem", fontWeight: 700 }}>
+                        Estimated Total, {selectedRfq?.currency || "PHP"}
+                      </td>
+                      <td style={{ padding: "0.6rem 0.75rem", textAlign: "right", fontWeight: 700 }}>
+                        {formatAmount(estimatedItemsTotal())}
+                      </td>
+                      {bidders.length > 0 && <td colSpan={bidders.length} />}
+                    </tr>
+                    {bidders.length > 0 && (
+                      <tr>
+                        <td colSpan={3} style={{ padding: "0.6rem 0.75rem", fontWeight: 700 }}>
+                          Computed Total, {selectedRfq?.currency || "PHP"}
+                        </td>
+                        {bidders.map((b) => (
+                          <td key={b.id} style={{ padding: "0.6rem 0.5rem", textAlign: "right", fontWeight: 700 }}>
+                            {formatAmount(bidderItemsTotal(b.id))}
+                          </td>
+                        ))}
+                      </tr>
+                    )}
+                  </tfoot>
+                </table>
+              </div>
+            )}
           </div>
         </>
       )}

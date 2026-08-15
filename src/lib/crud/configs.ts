@@ -8,6 +8,9 @@ const CURRENCY_HELP = "ISO 4217 code, e.g. PHP";
 const codeLabel = (r: Ref) => String(r.code ?? r.id);
 const codeTitleLabel = (r: Ref) =>
   `${r.code ?? ""}${r.title ? " · " + String(r.title) : r.name ? " · " + String(r.name) : ""}`;
+/** Display label for a procurement_items row: code + description (it has no title/name column). */
+const codeDescriptionLabel = (r: Ref) =>
+  `${r.code ?? ""}${r.description ? " · " + String(r.description) : ""}`;
 const nameLabel = (r: Ref) => String(r.name ?? r.id);
 /** Display label for a lookup_options row: its human-readable value. */
 const lookupLabel = (r: Ref) => String(r.value ?? r.id);
@@ -87,7 +90,12 @@ export const ENTITIES: EntityConfig[] = [
       { name: "budget_id", label: "Budget", type: "reference", refTable: "capex_budgets", refLabel: codeLabel, required: true, inList: true },
       { name: "title", label: "Title", type: "text", required: true, inList: true },
       { name: "description", label: "Description", type: "textarea" },
-      { name: "asset_category_id", label: "Category", type: "reference", ...lookupRef("asset_category"), required: true },
+      // No Category field here -- an Asset Request already belongs to
+      // exactly one Budget (budget_id, above), and that Budget carries its
+      // own Category (see "budgets" -> category_id, same asset_category
+      // list). A second, independently-set Category on the request itself
+      // just duplicated that taxonomy; dropped in migration 0023 along with
+      // the asset_category_id column.
       { name: "estimated_cost", label: "Estimated Cost", type: "currency", required: true, inList: true },
       { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
       { name: "funding_source_id", label: "Funding Source", type: "reference", ...lookupRef("funding_source"), inList: true },
@@ -110,9 +118,20 @@ export const ENTITIES: EntityConfig[] = [
     makeCode: (sb) => nextSequentialCode(sb, "bill_of_materials", "BOM-", 6),
     fields: [
       { name: "asset_request_id", label: "Asset Request", type: "reference", refTable: "asset_requests", refLabel: codeTitleLabel, required: true, inList: true, help: "One BOM per asset request" },
-      { name: "title", label: "Title", type: "text", required: true, inList: true },
+      // Not required -- the linked Asset Request above already carries its
+      // own title, so this one is just an optional override/label for the
+      // BOM itself. DB column made nullable to match (migration 0024).
+      { name: "title", label: "Title", type: "text", inList: true },
       { name: "status_id", label: "Status", type: "reference", ...lookupRef("bom_status"), required: true, inList: true, badge: true },
       { name: "prepared_by", label: "Prepared By", type: "text" },
+      // Trigger-maintained sum of the parts list's Extended Cost (migration
+      // 0025) -- same idea as project_charters.overall_progress_percent
+      // (0022): a cross-table aggregate can't be a generated column, so it's
+      // kept in sync by a trigger on bill_of_materials_lines instead. inList
+      // here is what actually answers "show it upfront" -- the parts list's
+      // own footer total (configs.ts's lineItems.totalField, still set
+      // below) only surfaces once a BOM is already open for editing.
+      { name: "estimated_total_cost", label: "Estimated Total", type: "currency", readOnly: true, inList: true, help: "Auto-computed: sum of the parts list's Extended Cost" },
       { name: "notes", label: "Notes", type: "textarea" },
     ],
     // The flat parts list (engineering/spec layer). Each saved line can be
@@ -129,9 +148,23 @@ export const ENTITIES: EntityConfig[] = [
         { name: "category_id", label: "Category", type: "reference", ...lookupRef("procurement_category"), required: true },
         { name: "quantity", label: "Qty", type: "number", required: true },
         { name: "unit_of_measure", label: "Unit", type: "text", required: true, placeholder: "each" },
-        { name: "estimated_unit_cost", label: "Est. Unit Cost", type: "currency", help: "Optional at this stage — refined during sourcing" },
+        { name: "estimated_unit_cost", label: "Unit Cost", type: "currency", help: "Optional at this stage — refined during sourcing" },
+        // DB-generated (quantity * estimated_unit_cost, migration 0019) --
+        // readOnly so it's never written, `compute` gives a live preview
+        // while editing instead of waiting for the real generated value to
+        // come back from a save.
+        {
+          name: "estimated_total_cost",
+          label: "Extended Cost",
+          type: "currency",
+          readOnly: true,
+          compute: (line) => Number(line.quantity || 0) * Number(line.estimated_unit_cost || 0),
+          help: "Qty × Unit Cost",
+        },
       ],
       emptyLine: () => ({ part_name: "", part_number: "", category_id: "", quantity: "", unit_of_measure: "", estimated_unit_cost: "" }),
+      totalField: "estimated_total_cost",
+      totalLabel: "Estimated Total",
       convertTo: {
         entityKey: "items",
         linkColumn: "procurement_item_id",
@@ -189,25 +222,6 @@ export const ENTITIES: EntityConfig[] = [
       { name: "preferred_contractor_id", label: "Preferred Contractor", type: "reference", refTable: "contractors", refLabel: nameLabel },
       { name: "status_id", label: "Status", type: "reference", ...lookupRef("procurement_item_status"), required: true, inList: true, badge: true },
     ],
-    // Bidding schedule: a freeform, per-item list of activities (Pre-bid
-    // Conference, Opening of Bids, Post-qualification, Award, ...) each with
-    // its own planned date and status — added/removed as dynamic lines in
-    // the item's form rather than fixed columns, since every item's schedule
-    // looks different. Backed by `bidding_schedule_activities`, which already
-    // existed live (migrations 0008-0011) with full owner-scoped RLS but no
-    // frontend.
-    lineItems: {
-      table: "bidding_schedule_activities",
-      parentColumn: "procurement_item_id",
-      label: "Bidding Schedule Activities",
-      addLabel: "+ Add Activity",
-      fields: [
-        { name: "activity", label: "Activity", type: "text", required: true, placeholder: "e.g. Pre-bid Conference, Opening of Bids" },
-        { name: "planned_date", label: "Planned Date", type: "date", required: true },
-        { name: "status_id", label: "Status", type: "reference", ...lookupRef("bidding_activity_status"), required: true },
-      ],
-      emptyLine: () => ({ activity: "", planned_date: "", status_id: "" }),
-    },
   },
   {
     key: "vendors",
@@ -271,11 +285,44 @@ export const ENTITIES: EntityConfig[] = [
       { name: "department", label: "Department", type: "text", required: true, inList: true },
       { name: "requisition_date", label: "Requisition Date", type: "date", required: true },
       { name: "required_by_date", label: "Required By", type: "date" },
+      // Not trigger-linked to the line items below -- unlike bom's
+      // estimated_total_cost (migration 0025), this one stays a manually
+      // entered planning figure. The line items' own footer total (below)
+      // is a separate, itemized cross-check once items are actually attached.
       { name: "estimated_total", label: "Estimated Total", type: "currency", inList: true },
       { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
       { name: "status_id", label: "Status", type: "reference", ...lookupRef("requisition_status"), required: true, inList: true, badge: true },
       { name: "approved_by", label: "Approved By", type: "text" },
     ],
+    // The actual link from a requisition to the procurement items it covers
+    // -- purchase_requisition_lines already existed live (migration 0001)
+    // with full owner-scoped RLS (prl_write) but had no frontend anywhere,
+    // so a requisition could never actually be tied to an item. This is also
+    // what the Bid Evaluation matrix's per-item pricing (see /bid-evaluation)
+    // reads from: RFQ -> requisition -> these lines -> procurement_items.
+    lineItems: {
+      table: "purchase_requisition_lines",
+      parentColumn: "requisition_id",
+      label: "Procurement Items",
+      addLabel: "+ Add Item",
+      fields: [
+        { name: "procurement_item_id", label: "Procurement Item", type: "reference", refTable: "procurement_items", refLabel: codeDescriptionLabel, required: true },
+        { name: "quantity", label: "Qty", type: "number", required: true },
+        { name: "estimated_unit_cost", label: "Unit Cost", type: "currency", help: "Optional -- defaults to the item's own estimated unit cost if left blank during sourcing" },
+        {
+          name: "line_total",
+          label: "Extended Cost",
+          type: "currency",
+          readOnly: true,
+          compute: (line) => Number(line.quantity || 0) * Number(line.estimated_unit_cost || 0),
+          help: "Qty × Unit Cost (not stored -- computed for display only)",
+        },
+        { name: "notes", label: "Notes", type: "text" },
+      ],
+      emptyLine: () => ({ procurement_item_id: "", quantity: "", estimated_unit_cost: "", notes: "" }),
+      totalField: "line_total",
+      totalLabel: "Items Total",
+    },
   },
   {
     key: "rfqs",
@@ -296,6 +343,26 @@ export const ENTITIES: EntityConfig[] = [
       { name: "awarded_vendor_id", label: "Awarded Supplier", type: "reference", refTable: "vendors", refLabel: nameLabel, help: "Must already have a bid on this RFQ. Award a supplier or a contractor, not both." },
       { name: "awarded_contractor_id", label: "Awarded Contractor", type: "reference", refTable: "contractors", refLabel: nameLabel },
     ],
+    // Bidding schedule: Pre-bid Conference, Opening of Bids, Post-qualification,
+    // Award, ... each with its own planned date and status. Originally lived
+    // per Procurement Item (migration 0007), but the schedule is really one
+    // shared event per RFQ -- every item bundled into the same RFQ goes
+    // through the same Opening of Bids, not a separate one each -- so it was
+    // re-keyed to the RFQ itself (migration 0031), same reasoning as why the
+    // Bid Evaluation matrix (see /bid-evaluation) is anchored to the RFQ
+    // rather than to individual items.
+    lineItems: {
+      table: "bidding_schedule_activities",
+      parentColumn: "bidding_id",
+      label: "Bidding Schedule Activities",
+      addLabel: "+ Add Activity",
+      fields: [
+        { name: "activity", label: "Activity", type: "text", required: true, placeholder: "e.g. Pre-bid Conference, Opening of Bids" },
+        { name: "planned_date", label: "Planned Date", type: "date", required: true },
+        { name: "status_id", label: "Status", type: "reference", ...lookupRef("bidding_activity_status"), required: true },
+      ],
+      emptyLine: () => ({ activity: "", planned_date: "", status_id: "" }),
+    },
   },
   {
     // Standalone module for the required-documents *template* per RFQ --
@@ -336,6 +403,13 @@ export const ENTITIES: EntityConfig[] = [
       { name: "vendor_id", label: "Supplier", type: "reference", refTable: "vendors", refLabel: nameLabel, inList: true, help: "Set a supplier or a contractor, not both" },
       { name: "contractor_id", label: "Contractor", type: "reference", refTable: "contractors", refLabel: nameLabel, inList: true },
       { name: "order_date", label: "Order Date", type: "date", required: true, inList: true },
+      // The formal go-ahead after the PO/contract is signed, authorizing the
+      // supplier/contractor to start delivery or mobilization (migration
+      // 0030). Tracked as a real date -- not just the "Notice to Proceed"
+      // status value below -- since contract duration and delay tracking are
+      // usually counted from the date NTP was received, same reasoning as
+      // order_date/expected_delivery_date already being real dates.
+      { name: "ntp_date", label: "Notice to Proceed Date", type: "date", help: "Date the supplier/contractor was authorized to start — contract duration is often counted from here" },
       { name: "expected_delivery_date", label: "Expected Delivery", type: "date" },
       { name: "subtotal", label: "Subtotal", type: "currency" },
       { name: "tax_amount", label: "Tax", type: "currency" },

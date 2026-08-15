@@ -52,6 +52,36 @@ function isLookupField(f: FieldDef): boolean {
   return f.type === "reference" && f.refTable === "lookup_options" && !!f.refFilter;
 }
 
+/**
+ * A line-item reference field pointing at a full entity table (not
+ * lookup_options -- the opposite of isLookupField) means "pick one row from
+ * that table" -- e.g. a requisition line's Procurement Item. Picking the
+ * same row on two different lines of the same list doesn't mean anything
+ * different from combining them into one line with a larger quantity, and
+ * for purchase_requisition_lines' procurement_item_id the database now
+ * enforces this with a unique constraint (migration 0029) -- catch it here
+ * first so the error reads as guidance instead of a raw duplicate-key
+ * Postgres message surfacing only after a failed save.
+ */
+function duplicateLineReferenceErrors(config: LineItemsConfig, lines: LineDraft[]): string[] {
+  const errors: string[] = [];
+  for (const field of config.fields) {
+    if (field.type !== "reference" || !field.refTable || field.refTable === "lookup_options") continue;
+    const seen = new Set<string>();
+    for (const line of lines) {
+      const v = line[field.name];
+      if (!v) continue;
+      const key = String(v);
+      if (seen.has(key)) {
+        errors.push(`${field.label} is used by more than one line — combine them into a single line instead`);
+        break;
+      }
+      seen.add(key);
+    }
+  }
+  return errors;
+}
+
 export function EntityManager({ entityKey }: { entityKey: string }) {
   const config = ENTITIES_BY_KEY[entityKey];
   const supabase = useMemo(() => createClient(), []);
@@ -245,6 +275,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
     const errors = validateValues(config.fields, form);
     if (config.lineItems) {
       for (const line of lineItems) errors.push(...validateValues(config.lineItems.fields, line));
+      errors.push(...duplicateLineReferenceErrors(config.lineItems, lineItems));
     }
     if (errors.length > 0) {
       showToast(errors[0], "error");
@@ -546,52 +577,111 @@ function LineItemsEditor({
           None added yet.
         </p>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-          {lines.map((line, i) => {
-            const converted = Boolean(config.convertTo && line[config.convertTo.linkColumn]);
-            return (
-              <div key={line._key}>
-                <div
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: `repeat(${config.fields.length}, 1fr) auto`,
-                    gap: "0.6rem",
-                    alignItems: "end",
-                    background: "var(--surface-container-low)",
-                    padding: "0.6rem",
-                    borderRadius: "0.5rem",
-                  }}
-                >
-                  {config.fields.map((f) => (
-                    <FieldInput
-                      key={f.name}
-                      id={`${line._key}-${f.name}`}
-                      field={f}
-                      value={line[f.name]}
-                      options={f.refTable ? refs[f.name] : undefined}
-                      onChange={(v) => onChange(i, f.name, v)}
-                      onAddNew={isLookupField(f) ? () => onAddNewOption(f) : undefined}
-                    />
-                  ))}
-                  <Button
-                    type="button"
-                    variant="danger"
-                    onClick={() => onRemove(i)}
-                    style={{ padding: "0.55rem 0.7rem", fontSize: "0.78rem", height: "fit-content" }}
+        <>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            {lines.map((line, i) => {
+              const converted = Boolean(config.convertTo && line[config.convertTo.linkColumn]);
+              return (
+                <div key={line._key}>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: `repeat(${config.fields.length}, 1fr) auto`,
+                      gap: "0.6rem",
+                      alignItems: "end",
+                      background: "var(--surface-container-low)",
+                      padding: "0.6rem",
+                      borderRadius: "0.5rem",
+                    }}
                   >
-                    Remove
-                  </Button>
+                    {config.fields.map((f) =>
+                      f.readOnly ? (
+                        <LineReadOnlyField key={f.name} field={f} value={f.compute ? f.compute(line) : line[f.name]} />
+                      ) : (
+                        <FieldInput
+                          key={f.name}
+                          id={`${line._key}-${f.name}`}
+                          field={f}
+                          value={line[f.name]}
+                          options={f.refTable ? refs[f.name] : undefined}
+                          onChange={(v) => onChange(i, f.name, v)}
+                          onAddNew={isLookupField(f) ? () => onAddNewOption(f) : undefined}
+                        />
+                      ),
+                    )}
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => onRemove(i)}
+                      style={{ padding: "0.55rem 0.7rem", fontSize: "0.78rem", height: "fit-content" }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                  {converted && (
+                    <p className="label-sm" style={{ margin: "0.3rem 0 0 0.2rem", textTransform: "none", letterSpacing: 0, color: "var(--tertiary, #2e9e5b)" }}>
+                      ✓ Converted to a {ENTITIES_BY_KEY[config.convertTo!.entityKey].singular}
+                    </p>
+                  )}
                 </div>
-                {converted && (
-                  <p className="label-sm" style={{ margin: "0.3rem 0 0 0.2rem", textTransform: "none", letterSpacing: 0, color: "var(--tertiary, #2e9e5b)" }}>
-                    ✓ Converted to a {ENTITIES_BY_KEY[config.convertTo!.entityKey].singular}
-                  </p>
-                )}
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+          {config.totalField && (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                alignItems: "baseline",
+                gap: "0.5rem",
+                marginTop: "0.6rem",
+                paddingTop: "0.6rem",
+                borderTop: "1px solid var(--surface-container-high)",
+              }}
+            >
+              <span className="label-sm" style={{ margin: 0 }}>{config.totalLabel ?? "Total"}</span>
+              <span style={{ fontWeight: 700, fontSize: "1.05rem" }}>{formatCurrency(lineItemsTotal(config, lines))}</span>
+            </div>
+          )}
+        </>
       )}
+    </div>
+  );
+}
+
+/** Sum of `config.totalField` (using its `compute`, if set) across every line. */
+function lineItemsTotal(config: LineItemsConfig, lines: LineDraft[]): number {
+  const field = config.fields.find((f) => f.name === config.totalField);
+  if (!field) return 0;
+  return lines.reduce((sum, line) => {
+    const v = field.compute ? field.compute(line) : line[field.name];
+    return sum + (Number(v) || 0);
+  }, 0);
+}
+
+/**
+ * Disabled display box for a readOnly line-item field — the LineItemsEditor
+ * equivalent of the top-level form's ReadOnlyField, but compact (no help
+ * paragraph) to fit the dense per-line grid. `value` is normally
+ * `field.compute?.(line) ?? line[field.name]`, computed by the caller.
+ */
+function LineReadOnlyField({ field, value }: { field: FieldDef; value: unknown }) {
+  const empty = value === undefined || value === null || value === "";
+  const display = empty ? "—" : field.type === "currency" ? formatCurrency(Number(value)) : String(value);
+  return (
+    <div>
+      <label className="field-label">{field.label}</label>
+      <div
+        className="input"
+        aria-readonly="true"
+        style={{
+          background: "var(--surface-container)",
+          color: "var(--on-surface-variant)",
+          cursor: "not-allowed",
+        }}
+      >
+        {display}
+      </div>
     </div>
   );
 }

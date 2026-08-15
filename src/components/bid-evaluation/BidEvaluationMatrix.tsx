@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { escapeCsvValue, downloadFile } from "@/lib/utils";
+import { useRole } from "@/lib/auth/role-context";
 
 /**
  * Bid Evaluation Matrix — the standalone checklist (rfq-checklist entity,
@@ -147,6 +148,10 @@ function formatDuration(value: number | null): string {
 export function BidEvaluationMatrix() {
   const supabase = createClient();
   const showToast = useToast();
+  // Bid opening is a write-heavy workflow (marks, prices, warranty/delivery
+  // terms) -- viewers get the same matrix read-only, RLS blocks the writes
+  // regardless, this just keeps them from tapping controls that would error.
+  const canEdit = useRole() === "editor";
 
   const [rfqs, setRfqs] = useState<RfqOption[]>([]);
   const [allVendors, setAllVendors] = useState<NameOption[]>([]);
@@ -351,7 +356,7 @@ export function BidEvaluationMatrix() {
   const selectedRfq = rfqs.find((r) => r.id === selectedRfqId);
 
   async function addBidder(kind: "vendor" | "contractor", id: string) {
-    if (!selectedRfqId) return;
+    if (!canEdit || !selectedRfqId) return;
     try {
       const payload: Record<string, unknown> = {
         bidding_id: selectedRfqId,
@@ -408,6 +413,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function removeBidder(bidderId: string) {
+    if (!canEdit) return;
     if (!confirm("Remove this bidder? This also clears their Pass/Fail marks, bid amounts, and item price quotes.")) return;
     try {
       const { error } = await supabase.from("vendor_bids").delete().eq("id", bidderId);
@@ -433,6 +439,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function saveBidderAmount(bidderId: string, field: "total_price" | "bid_security_amount", value: number | null) {
+    if (!canEdit) return;
     try {
       const { error } = await supabase.from("vendor_bids").update({ [field]: value }).eq("id", bidderId);
       if (error) throw error;
@@ -451,6 +458,7 @@ export function BidEvaluationMatrix() {
     value: number | null,
     unit: string | null,
   ) {
+    if (!canEdit) return;
     try {
       const { error } = await supabase
         .from("vendor_bids")
@@ -463,7 +471,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function addChecklistItem(section: string, documentName: string) {
-    if (!selectedRfqId || !section.trim() || !documentName.trim()) return;
+    if (!canEdit || !selectedRfqId || !section.trim() || !documentName.trim()) return;
     try {
       const { data, error } = await supabase
         .from("rfq_document_checklist")
@@ -480,6 +488,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function removeChecklistItem(itemId: string) {
+    if (!canEdit) return;
     if (!confirm("Remove this document requirement? This also clears every bidder's Pass/Fail mark for it.")) return;
     try {
       const { error } = await supabase.from("rfq_document_checklist").delete().eq("id", itemId);
@@ -498,6 +507,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function saveChecklistField(itemId: string, field: "document_name" | "remarks", value: string) {
+    if (!canEdit) return;
     try {
       const payload = field === "remarks" ? { remarks: value.trim() === "" ? null : value } : { document_name: value };
       const { error } = await supabase.from("rfq_document_checklist").update(payload).eq("id", itemId);
@@ -508,6 +518,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function togglePass(checklistItemId: string, vendorBidId: string, next: boolean) {
+    if (!canEdit) return;
     const key = resultKey(checklistItemId, vendorBidId);
     setResults((prev) => new Map(prev).set(key, next));
     try {
@@ -525,6 +536,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function saveQuote(procurementItemId: string, vendorBidId: string, unitPrice: number | null) {
+    if (!canEdit) return;
     const key = quoteKey(procurementItemId, vendorBidId);
     const prevValue = quotes.get(key);
     setQuotes((prev) => {
@@ -579,7 +591,7 @@ export function BidEvaluationMatrix() {
   }
 
   async function loadStandardTemplate() {
-    if (!selectedRfqId) return;
+    if (!canEdit || !selectedRfqId) return;
     setLoadingTemplate(true);
     try {
       const payload = STANDARD_TEMPLATE.map((t) => ({ bidding_id: selectedRfqId, section: t.section, document_name: t.document_name }));
@@ -701,76 +713,78 @@ export function BidEvaluationMatrix() {
         <p style={{ color: "var(--on-surface-variant)" }}>Loading…</p>
       ) : (
         <>
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
-            <div className="card" style={{ padding: "0.75rem 1rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-              <span className="label-sm" style={{ margin: 0 }}>Add Bidder</span>
-              <select
-                className="select"
-                style={{ width: "auto", minWidth: 200 }}
-                value={addBidderChoice}
-                onChange={(e) => setAddBidderChoice(e.target.value)}
-              >
-                <option value="">Select a supplier or contractor…</option>
-                {availableVendors.length > 0 && (
-                  <optgroup label="Suppliers">
-                    {availableVendors.map((v) => (
-                      <option key={`v-${v.id}`} value={`vendor:${v.id}`}>{v.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-                {availableContractors.length > 0 && (
-                  <optgroup label="Contractors">
-                    {availableContractors.map((v) => (
-                      <option key={`c-${v.id}`} value={`contractor:${v.id}`}>{v.name}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-              <Button variant="secondary" disabled={!addBidderChoice} onClick={handleAddBidderClick} style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
-                + Add
-              </Button>
+          {canEdit && (
+            <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginBottom: "1rem" }}>
+              <div className="card" style={{ padding: "0.75rem 1rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <span className="label-sm" style={{ margin: 0 }}>Add Bidder</span>
+                <select
+                  className="select"
+                  style={{ width: "auto", minWidth: 200 }}
+                  value={addBidderChoice}
+                  onChange={(e) => setAddBidderChoice(e.target.value)}
+                >
+                  <option value="">Select a supplier or contractor…</option>
+                  {availableVendors.length > 0 && (
+                    <optgroup label="Suppliers">
+                      {availableVendors.map((v) => (
+                        <option key={`v-${v.id}`} value={`vendor:${v.id}`}>{v.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {availableContractors.length > 0 && (
+                    <optgroup label="Contractors">
+                      {availableContractors.map((v) => (
+                        <option key={`c-${v.id}`} value={`contractor:${v.id}`}>{v.name}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <Button variant="secondary" disabled={!addBidderChoice} onClick={handleAddBidderClick} style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
+                  + Add
+                </Button>
+              </div>
+
+              <div className="card" style={{ padding: "0.75rem 1rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
+                <span className="label-sm" style={{ margin: 0 }}>Add Document</span>
+                <input
+                  className="input"
+                  list="section-suggestions"
+                  style={{ width: 150, padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}
+                  placeholder="Section"
+                  value={newSection}
+                  onChange={(e) => setNewSection(e.target.value)}
+                />
+                <datalist id="section-suggestions">
+                  {Array.from(new Set([...SECTION_SUGGESTIONS, ...sectionOrder])).map((s) => (
+                    <option key={s} value={s} />
+                  ))}
+                </datalist>
+                <input
+                  className="input"
+                  style={{ width: 220, padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}
+                  placeholder="Document name"
+                  value={newDocument}
+                  onChange={(e) => setNewDocument(e.target.value)}
+                />
+                <Button
+                  variant="secondary"
+                  disabled={!newSection.trim() || !newDocument.trim()}
+                  onClick={() => addChecklistItem(newSection, newDocument)}
+                  style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
+                >
+                  + Add
+                </Button>
+              </div>
+
+              {checklistItems.length === 0 && (
+                <Button variant="secondary" disabled={loadingTemplate} onClick={loadStandardTemplate} style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
+                  {loadingTemplate ? "Loading…" : "Load Standard Checklist"}
+                </Button>
+              )}
             </div>
+          )}
 
-            <div className="card" style={{ padding: "0.75rem 1rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
-              <span className="label-sm" style={{ margin: 0 }}>Add Document</span>
-              <input
-                className="input"
-                list="section-suggestions"
-                style={{ width: 150, padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}
-                placeholder="Section"
-                value={newSection}
-                onChange={(e) => setNewSection(e.target.value)}
-              />
-              <datalist id="section-suggestions">
-                {Array.from(new Set([...SECTION_SUGGESTIONS, ...sectionOrder])).map((s) => (
-                  <option key={s} value={s} />
-                ))}
-              </datalist>
-              <input
-                className="input"
-                style={{ width: 220, padding: "0.4rem 0.6rem", fontSize: "0.8rem" }}
-                placeholder="Document name"
-                value={newDocument}
-                onChange={(e) => setNewDocument(e.target.value)}
-              />
-              <Button
-                variant="secondary"
-                disabled={!newSection.trim() || !newDocument.trim()}
-                onClick={() => addChecklistItem(newSection, newDocument)}
-                style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}
-              >
-                + Add
-              </Button>
-            </div>
-
-            {checklistItems.length === 0 && (
-              <Button variant="secondary" disabled={loadingTemplate} onClick={loadStandardTemplate} style={{ padding: "0.4rem 0.8rem", fontSize: "0.8rem" }}>
-                {loadingTemplate ? "Loading…" : "Load Standard Checklist"}
-              </Button>
-            )}
-          </div>
-
-          {bidders.length === 0 && (
+          {canEdit && bidders.length === 0 && (
             <p className="label-sm" style={{ textTransform: "none", letterSpacing: 0, color: "var(--on-surface-variant)", marginBottom: "0.75rem" }}>
               Add at least one bidder to start marking documents Pass/Fail.
             </p>
@@ -787,15 +801,17 @@ export function BidEvaluationMatrix() {
                       <th key={b.id} style={{ padding: "0.6rem 0.5rem", textAlign: "center" }}>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.25rem" }}>
                           <span style={{ fontWeight: 700, fontSize: "0.78rem" }}>{b.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => removeBidder(b.id)}
-                            title="Remove bidder"
-                            aria-label="Remove bidder"
-                            style={{ background: "none", border: "none", color: "var(--on-surface-variant)", cursor: "pointer", fontSize: "0.95rem", padding: 0, lineHeight: 1 }}
-                          >
-                            🗑️
-                          </button>
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => removeBidder(b.id)}
+                              title="Remove bidder"
+                              aria-label="Remove bidder"
+                              style={{ background: "none", border: "none", color: "var(--on-surface-variant)", cursor: "pointer", fontSize: "0.95rem", padding: 0, lineHeight: 1 }}
+                            >
+                              🗑️
+                            </button>
+                          )}
                         </div>
                       </th>
                     ))}
@@ -828,6 +844,7 @@ export function BidEvaluationMatrix() {
                                 className="input"
                                 style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem" }}
                                 defaultValue={item.document_name}
+                                disabled={!canEdit}
                                 onBlur={(e) => {
                                   const value = e.target.value;
                                   if (value !== item.document_name) {
@@ -836,14 +853,16 @@ export function BidEvaluationMatrix() {
                                   }
                                 }}
                               />
-                              <button
-                                type="button"
-                                onClick={() => removeChecklistItem(item.id)}
-                                title="Remove document"
-                                style={{ background: "none", border: "none", color: "var(--error, #b3261e)", cursor: "pointer" }}
-                              >
-                                ✕
-                              </button>
+                              {canEdit && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeChecklistItem(item.id)}
+                                  title="Remove document"
+                                  style={{ background: "none", border: "none", color: "var(--error, #b3261e)", cursor: "pointer" }}
+                                >
+                                  ✕
+                                </button>
+                              )}
                             </div>
                           </td>
                           {bidders.map((b) => (
@@ -852,6 +871,7 @@ export function BidEvaluationMatrix() {
                                 type="checkbox"
                                 checked={Boolean(results.get(resultKey(item.id, b.id)))}
                                 onChange={(e) => togglePass(item.id, b.id, e.target.checked)}
+                                disabled={!canEdit}
                                 style={{ width: "1.15rem", height: "1.15rem" }}
                               />
                             </td>
@@ -862,6 +882,7 @@ export function BidEvaluationMatrix() {
                               style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem" }}
                               placeholder="—"
                               defaultValue={item.remarks ?? ""}
+                              disabled={!canEdit}
                               onBlur={(e) => {
                                 const value = e.target.value;
                                 if ((item.remarks ?? "") !== value) {
@@ -888,6 +909,7 @@ export function BidEvaluationMatrix() {
                             className="input"
                             style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right" }}
                             defaultValue={formatAmount(b.total_price)}
+                            disabled={!canEdit}
                             onFocus={(e) => {
                               e.target.value = b.total_price === null ? "" : String(b.total_price);
                             }}
@@ -914,6 +936,7 @@ export function BidEvaluationMatrix() {
                             className="input"
                             style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right" }}
                             defaultValue={formatAmount(b.bid_security_amount)}
+                            disabled={!canEdit}
                             onFocus={(e) => {
                               e.target.value = b.bid_security_amount === null ? "" : String(b.bid_security_amount);
                             }}
@@ -941,6 +964,7 @@ export function BidEvaluationMatrix() {
                               className="input"
                               style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right", width: 60 }}
                               defaultValue={formatDuration(b.warranty_value)}
+                              disabled={!canEdit}
                               onFocus={(e) => {
                                 e.target.value = b.warranty_value === null ? "" : String(b.warranty_value);
                               }}
@@ -960,6 +984,7 @@ export function BidEvaluationMatrix() {
                               className="select"
                               style={{ padding: "0.3rem 0.35rem", fontSize: "0.78rem", width: "auto" }}
                               value={b.warranty_unit ?? "years"}
+                              disabled={!canEdit}
                               onChange={(e) => {
                                 const unit = e.target.value;
                                 setBidders((prev) => prev.map((x) => (x.id === b.id ? { ...x, warranty_unit: unit } : x)));
@@ -985,6 +1010,7 @@ export function BidEvaluationMatrix() {
                               className="input"
                               style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right", width: 60 }}
                               defaultValue={formatDuration(b.delivery_value)}
+                              disabled={!canEdit}
                               onFocus={(e) => {
                                 e.target.value = b.delivery_value === null ? "" : String(b.delivery_value);
                               }}
@@ -1004,6 +1030,7 @@ export function BidEvaluationMatrix() {
                               className="select"
                               style={{ padding: "0.3rem 0.35rem", fontSize: "0.78rem", width: "auto" }}
                               value={b.delivery_unit ?? "days"}
+                              disabled={!canEdit}
                               onChange={(e) => {
                                 const unit = e.target.value;
                                 setBidders((prev) => prev.map((x) => (x.id === b.id ? { ...x, delivery_unit: unit } : x)));
@@ -1066,6 +1093,7 @@ export function BidEvaluationMatrix() {
                               className="input"
                               style={{ padding: "0.35rem 0.5rem", fontSize: "0.85rem", textAlign: "right", width: 100 }}
                               defaultValue={formatAmount(quotes.get(quoteKey(item.procurement_item_id, b.id)) ?? null)}
+                              disabled={!canEdit}
                               onFocus={(e) => {
                                 const v = quotes.get(quoteKey(item.procurement_item_id, b.id));
                                 e.target.value = v === undefined ? "" : String(v);

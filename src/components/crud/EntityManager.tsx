@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { useRole } from "@/lib/auth/role-context";
 import {
   listRows,
   referenceOptions,
@@ -86,6 +87,10 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   const config = ENTITIES_BY_KEY[entityKey];
   const supabase = useMemo(() => createClient(), []);
   const showToast = useToast();
+  // Drives which write controls render -- RLS is the real enforcement
+  // (migration 0033), this just keeps viewers from seeing buttons that
+  // would fail. Guarded again inline in the handlers below, belt-and-suspenders.
+  const canEdit = useRole() === "editor";
 
   const [rows, setRows] = useState<Row[]>([]);
   const [refs, setRefs] = useState<RefMap>({});
@@ -146,6 +151,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   }, [load]);
 
   function openCreate() {
+    if (!canEdit) return;
     setEditing(null);
     setForm(defaults(config.fields));
     const seeded = config.lineItems?.defaultLines?.() ?? [];
@@ -272,6 +278,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!canEdit) return;
     const errors = validateValues(config.fields, form);
     if (config.lineItems) {
       for (const line of lineItems) errors.push(...validateValues(config.lineItems.fields, line));
@@ -314,6 +321,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   }
 
   async function handleDelete(row: Row) {
+    if (!canEdit) return;
     if (!confirm(`Delete ${row[config.primaryField] ?? config.singular}? This cannot be undone.`)) return;
     try {
       await deleteRow(supabase, config, row.id);
@@ -338,7 +346,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
       <PageHeader
         breadcrumb={config.breadcrumb}
         title={config.plural}
-        actions={<Button onClick={openCreate}>+ New {config.singular}</Button>}
+        actions={canEdit ? <Button onClick={openCreate}>+ New {config.singular}</Button> : undefined}
       />
 
       {loading ? (
@@ -374,8 +382,14 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
                       onDoubleClick={(e) => e.stopPropagation()}
                       style={{ display: "flex", gap: "0.4rem", justifyContent: "flex-end" }}
                     >
-                      <Button variant="secondary" onClick={() => openEdit(row)} style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}>Edit</Button>
-                      <Button variant="danger" onClick={() => handleDelete(row)} style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}>Delete</Button>
+                      {canEdit ? (
+                        <>
+                          <Button variant="secondary" onClick={() => openEdit(row)} style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}>Edit</Button>
+                          <Button variant="danger" onClick={() => handleDelete(row)} style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}>Delete</Button>
+                        </>
+                      ) : (
+                        <Button variant="secondary" onClick={() => openEdit(row)} style={{ padding: "0.35rem 0.75rem", fontSize: "0.8rem" }}>View</Button>
+                      )}
                     </div>
                   </Td>
                 </tr>
@@ -402,6 +416,8 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
           {config.fields.map((f) =>
             f.readOnly ? (
               <ReadOnlyField key={f.name} field={f} value={editing?.[f.name]} />
+            ) : !canEdit ? (
+              <ReadOnlyField key={f.name} field={f} value={form[f.name]} />
             ) : (
               <FieldInput
                 key={f.name}
@@ -419,13 +435,14 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
               lines={lineItems}
               refs={lineRefs}
               loading={lineItemsLoading}
+              canEdit={canEdit}
               onAdd={addLineItem}
               onChange={updateLineItem}
               onRemove={removeLineItem}
               onAddNewOption={(f) => addLookupOption(f, "line")}
             />
           )}
-          {config.lineItems?.convertTo && editing && (
+          {config.lineItems?.convertTo && editing && canEdit && (
             <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <Button type="button" variant="secondary" onClick={handleConvert} disabled={converting}>
                 {converting ? "Converting…" : config.lineItems.convertTo.buttonLabel}
@@ -433,8 +450,14 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
             </div>
           )}
           <div style={{ display: "flex", gap: "0.75rem", marginTop: "0.5rem" }}>
-            <Button type="submit" disabled={saving}>{saving ? "Saving…" : editing ? "Update" : "Create"}</Button>
-            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+            {canEdit ? (
+              <>
+                <Button type="submit" disabled={saving}>{saving ? "Saving…" : editing ? "Update" : "Create"}</Button>
+                <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Cancel</Button>
+              </>
+            ) : (
+              <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>Close</Button>
+            )}
           </div>
         </form>
       </Modal>
@@ -547,6 +570,7 @@ function LineItemsEditor({
   lines,
   refs,
   loading,
+  canEdit,
   onAdd,
   onChange,
   onRemove,
@@ -556,6 +580,7 @@ function LineItemsEditor({
   lines: LineDraft[];
   refs: RefMap;
   loading: boolean;
+  canEdit: boolean;
   onAdd: () => void;
   onChange: (index: number, name: string, value: unknown) => void;
   onRemove: (index: number) => void;
@@ -565,9 +590,11 @@ function LineItemsEditor({
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.6rem" }}>
         <label className="field-label" style={{ margin: 0 }}>{config.label}</label>
-        <Button type="button" variant="secondary" onClick={onAdd} style={{ padding: "0.3rem 0.7rem", fontSize: "0.78rem" }}>
-          {config.addLabel ?? "+ Add line"}
-        </Button>
+        {canEdit && (
+          <Button type="button" variant="secondary" onClick={onAdd} style={{ padding: "0.3rem 0.7rem", fontSize: "0.78rem" }}>
+            {config.addLabel ?? "+ Add line"}
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -586,7 +613,7 @@ function LineItemsEditor({
                   <div
                     style={{
                       display: "grid",
-                      gridTemplateColumns: `repeat(${config.fields.length}, 1fr) auto`,
+                      gridTemplateColumns: canEdit ? `repeat(${config.fields.length}, 1fr) auto` : `repeat(${config.fields.length}, 1fr)`,
                       gap: "0.6rem",
                       alignItems: "end",
                       background: "var(--surface-container-low)",
@@ -595,7 +622,7 @@ function LineItemsEditor({
                     }}
                   >
                     {config.fields.map((f) =>
-                      f.readOnly ? (
+                      f.readOnly || !canEdit ? (
                         <LineReadOnlyField key={f.name} field={f} value={f.compute ? f.compute(line) : line[f.name]} />
                       ) : (
                         <FieldInput
@@ -609,14 +636,16 @@ function LineItemsEditor({
                         />
                       ),
                     )}
-                    <Button
-                      type="button"
-                      variant="danger"
-                      onClick={() => onRemove(i)}
-                      style={{ padding: "0.55rem 0.7rem", fontSize: "0.78rem", height: "fit-content" }}
-                    >
-                      Remove
-                    </Button>
+                    {canEdit && (
+                      <Button
+                        type="button"
+                        variant="danger"
+                        onClick={() => onRemove(i)}
+                        style={{ padding: "0.55rem 0.7rem", fontSize: "0.78rem", height: "fit-content" }}
+                      >
+                        Remove
+                      </Button>
+                    )}
                   </div>
                   {converted && (
                     <p className="label-sm" style={{ margin: "0.3rem 0 0 0.2rem", textTransform: "none", letterSpacing: 0, color: "var(--tertiary, #2e9e5b)" }}>

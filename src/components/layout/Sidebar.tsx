@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { MODULES, entitiesForModule } from "@/lib/crud/configs";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { Badge } from "@/components/ui/Badge";
+import type { UserRole } from "@/lib/auth/role-context";
 
-export function Sidebar({ email }: { email: string }) {
+export function Sidebar({ email, role }: { email: string; role: UserRole }) {
   const pathname = usePathname();
 
   return (
@@ -33,6 +35,9 @@ export function Sidebar({ email }: { email: string }) {
       <nav style={{ display: "flex", flexDirection: "column", gap: "1rem", flex: 1, overflowY: "auto" }}>
         <NavLink href="/dashboard" label="Overview" active={pathname === "/dashboard"} icon="◈" />
         <NavLink href="/schedule" label="Annual Schedule" active={pathname === "/schedule"} icon="▦" />
+        {role === "editor" && (
+          <NavLink href="/users" label="Users" active={pathname === "/users"} icon="◐" />
+        )}
 
         {MODULES.map((m) => (
           <div key={m.key}>
@@ -56,7 +61,10 @@ export function Sidebar({ email }: { email: string }) {
       </nav>
 
       <div style={{ padding: "0 0.5rem", borderTop: "1px solid var(--outline-variant)", paddingTop: "1rem" }}>
-        <p style={{ fontSize: "0.8rem", fontWeight: 600, margin: 0 }}>{email.split("@")[0]}</p>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+          <p style={{ fontSize: "0.8rem", fontWeight: 600, margin: 0 }}>{email.split("@")[0]}</p>
+          <Badge value={role} label={role === "editor" ? "Editor" : "Viewer"} />
+        </div>
         <p className="label-sm" style={{ margin: "0.1rem 0 0.75rem", textTransform: "none", letterSpacing: 0 }}>{email}</p>
         <ThemeToggle />
         <form action="/auth/signout" method="post">

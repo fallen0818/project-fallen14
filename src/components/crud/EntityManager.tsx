@@ -10,6 +10,7 @@ import {
   deleteRow,
   listLineItems,
   saveLineItems,
+  createLookupOption,
   type Row,
   type LineRow,
 } from "@/lib/crud/service";
@@ -38,6 +39,18 @@ type RefMap = Record<string, Row[]>;
  * way as the parent's would collide).
  */
 type LineDraft = Record<string, unknown> & { _key: string; id?: string };
+
+/**
+ * True for a "reference" field built with configs.ts's `lookupRef()` --
+ * i.e. it points at `lookup_options` filtered to one list_key, so its
+ * dropdown can offer "+ Add new…" (see addLookupOption). Excludes reference
+ * fields pointing at a full entity table (vendors, contractors, other
+ * capex_budgets/asset_requests rows, ...) -- those have their own required
+ * fields beyond a single value and can't be created from a one-line prompt.
+ */
+function isLookupField(f: FieldDef): boolean {
+  return f.type === "reference" && f.refTable === "lookup_options" && !!f.refFilter;
+}
 
 export function EntityManager({ entityKey }: { entityKey: string }) {
   const config = ENTITIES_BY_KEY[entityKey];
@@ -148,6 +161,36 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   }
   function removeLineItem(index: number) {
     setLineItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  /**
+   * Handle "+ Add new…" in a lookup_options-backed dropdown (see
+   * isLookupField): prompts for the new value, writes it to lookup_options
+   * under that field's list_key, merges it into the right options map so it
+   * shows up immediately without a full reload, and returns its id so the
+   * caller can select it right away. `scope` picks refs vs. lineRefs since a
+   * top-level field and a line-item field can share a name but need separate
+   * option lists (see RefMap's doc comment above).
+   */
+  async function addLookupOption(field: FieldDef, scope: "top" | "line"): Promise<string | null> {
+    const listKey = field.refFilter?.value;
+    if (!listKey) return null;
+    const value = window.prompt(`New ${field.label} value:`)?.trim();
+    if (!value) return null;
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+      const created = await createLookupOption(supabase, listKey, value, user.id);
+      const setter = scope === "top" ? setRefs : setLineRefs;
+      setter((prev) => ({ ...prev, [field.name]: [created, ...(prev[field.name] ?? [])] }));
+      showToast(`Added "${value}" to ${field.label}`, "success");
+      return created.id;
+    } catch (err) {
+      showToast(errorMessage(err), "error");
+      return null;
+    }
   }
 
   /**
@@ -335,6 +378,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
                 value={form[f.name]}
                 options={f.refTable ? refs[f.name] : undefined}
                 onChange={(v) => setForm((prev) => ({ ...prev, [f.name]: v }))}
+                onAddNew={isLookupField(f) ? () => addLookupOption(f, "top") : undefined}
               />
             ),
           )}
@@ -347,6 +391,7 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
               onAdd={addLineItem}
               onChange={updateLineItem}
               onRemove={removeLineItem}
+              onAddNewOption={(f) => addLookupOption(f, "line")}
             />
           )}
           {config.lineItems?.convertTo && editing && (
@@ -366,17 +411,30 @@ export function EntityManager({ entityKey }: { entityKey: string }) {
   );
 }
 
+/** Sentinel <option> value for "+ Add new…" — chosen so it can never collide
+ *  with a real lookup_options uuid. */
+const ADD_NEW_OPTION = "__add_new__";
+
 function FieldInput({
   field,
   value,
   options,
   onChange,
+  onAddNew,
   id,
 }: {
   field: FieldDef;
   value: unknown;
   options?: Row[];
   onChange: (v: unknown) => void;
+  /**
+   * When set, the field's dropdown gets a trailing "+ Add new…" option.
+   * Picking it calls this to prompt for and create the new value (see
+   * EntityManager's addLookupOption) and resolves to the new row's id, or
+   * null if the user cancelled — in which case the select reverts to
+   * whatever was already chosen instead of landing on the sentinel value.
+   */
+  onAddNew?: () => Promise<string | null>;
   /** DOM id override — needed when the same field renders repeatedly, e.g.
    *  one row per dynamically-added line item, where reusing field.name as
    *  the id would produce duplicate DOM ids. */
@@ -400,13 +458,31 @@ function FieldInput({
           {field.options?.map((o) => <option key={o} value={o}>{STATUS_LABELS[o] ?? o}</option>)}
         </select>
       ) : field.type === "reference" ? (
-        <select className="select" id={domId} value={String(v)} onChange={(e) => onChange(e.target.value)}>
+        <select
+          className="select"
+          id={domId}
+          value={String(v)}
+          onChange={async (e) => {
+            const selected = e.target.value;
+            if (selected !== ADD_NEW_OPTION) {
+              onChange(selected);
+              return;
+            }
+            // Reset the <select> back to the current value immediately so it
+            // doesn't sit on the sentinel option while the prompt is open;
+            // onAddNew's own result (or null on cancel) is applied after.
+            e.target.value = String(v);
+            const newId = await onAddNew?.();
+            if (newId) onChange(newId);
+          }}
+        >
           <option value="">Select…</option>
           {(options ?? []).map((o) => (
             <option key={o.id} value={o.id}>
               {field.refLabel ? field.refLabel(o) : String(o.code ?? o.id)}
             </option>
           ))}
+          {onAddNew && <option value={ADD_NEW_OPTION}>+ Add new…</option>}
         </select>
       ) : field.type === "boolean" ? (
         <input type="checkbox" checked={Boolean(v)} onChange={(e) => onChange(e.target.checked)} style={{ width: "1.1rem", height: "1.1rem" }} />
@@ -443,6 +519,7 @@ function LineItemsEditor({
   onAdd,
   onChange,
   onRemove,
+  onAddNewOption,
 }: {
   config: LineItemsConfig;
   lines: LineDraft[];
@@ -451,6 +528,7 @@ function LineItemsEditor({
   onAdd: () => void;
   onChange: (index: number, name: string, value: unknown) => void;
   onRemove: (index: number) => void;
+  onAddNewOption: (field: FieldDef) => Promise<string | null>;
 }) {
   return (
     <div>
@@ -492,6 +570,7 @@ function LineItemsEditor({
                       value={line[f.name]}
                       options={f.refTable ? refs[f.name] : undefined}
                       onChange={(v) => onChange(i, f.name, v)}
+                      onAddNew={isLookupField(f) ? () => onAddNewOption(f) : undefined}
                     />
                   ))}
                   <Button

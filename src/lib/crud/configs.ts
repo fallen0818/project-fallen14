@@ -3,8 +3,6 @@ import { nextSequentialCode } from "./service";
 
 type Ref = Record<string, unknown>;
 
-// ---- shared option vocabularies (mirror the SQL CHECK constraints) ----------
-const CATEGORY = ["it-infrastructure", "facilities", "machinery-equipment", "vehicles", "software", "research-development", "other"] as const;
 const CURRENCY_HELP = "ISO 4217 code, e.g. PHP";
 
 const codeLabel = (r: Ref) => String(r.code ?? r.id);
@@ -42,14 +40,20 @@ export const ENTITIES: EntityConfig[] = [
     makeCode: (sb, v) => nextSequentialCode(sb, "capex_budgets", `CBUD-${v.fiscal_year ?? new Date().getFullYear()}-`, 4),
     fields: [
       { name: "fiscal_year", label: "Fiscal Year", type: "number", required: true, inList: true },
-      { name: "period", label: "Period", type: "select", options: ["FY", "Q1", "Q2", "Q3", "Q4"], required: true, inList: true },
+      { name: "period_id", label: "Period", type: "reference", ...lookupRef("budget_period"), required: true, inList: true },
       { name: "department", label: "Department", type: "text", required: true, inList: true },
-      { name: "category", label: "Category", type: "select", options: CATEGORY },
+      { name: "category_id", label: "Category", type: "reference", ...lookupRef("asset_category"), inList: true },
       { name: "allocated_amount", label: "Allocated", type: "currency", required: true, inList: true },
-      { name: "committed_amount", label: "Committed", type: "currency" },
-      { name: "spent_amount", label: "Spent", type: "currency" },
+      // DB columns are `not null default 0` -- optional in the form, but if
+      // left blank, clean() (service.ts) turns "" into an explicit null,
+      // which violates the not-null constraint (unlike the required fields
+      // above, these have no built-in guard against a blank submit). Default
+      // to 0 here so a fresh Budget always submits a real number, matching
+      // what the DB would have used anyway.
+      { name: "committed_amount", label: "Committed", type: "currency", defaultValue: 0 },
+      { name: "spent_amount", label: "Spent", type: "currency", defaultValue: 0 },
       { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
-      { name: "status", label: "Status", type: "select", options: ["draft", "proposed", "approved", "locked", "closed"], required: true, inList: true, badge: true },
+      { name: "status_id", label: "Status", type: "reference", ...lookupRef("budget_status"), required: true, inList: true, badge: true },
       { name: "notes", label: "Notes", type: "textarea" },
     ],
   },
@@ -269,7 +273,7 @@ export const ENTITIES: EntityConfig[] = [
       { name: "required_by_date", label: "Required By", type: "date" },
       { name: "estimated_total", label: "Estimated Total", type: "currency", inList: true },
       { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
-      { name: "status", label: "Status", type: "select", options: ["draft", "submitted", "approved", "rejected", "converted-to-rfq", "closed"], required: true, inList: true, badge: true },
+      { name: "status_id", label: "Status", type: "reference", ...lookupRef("requisition_status"), required: true, inList: true, badge: true },
       { name: "approved_by", label: "Approved By", type: "text" },
     ],
   },

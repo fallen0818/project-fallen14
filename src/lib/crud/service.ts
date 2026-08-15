@@ -29,6 +29,46 @@ export async function referenceOptions(
   return (data ?? []) as Row[];
 }
 
+/**
+ * Add a new value to a `lookup_options` list (e.g. "+ Add new…" in a
+ * reference dropdown built with `lookupRef()` in configs.ts). Every list is
+ * seeded with its own code prefix (ACAT-0007, BSTA-0005, ...) -- rather than
+ * hardcode a mapping from list_key to prefix here, infer it from that list's
+ * own existing codes and keep numbering in the same scheme. A list with no
+ * codes yet (none should exist among the ones wired up today, but a
+ * brand-new list_key created entirely through the UI could hit this) falls
+ * back to a prefix derived from the list_key itself.
+ */
+export async function createLookupOption(
+  supabase: SupabaseClient,
+  listKey: string,
+  value: string,
+  ownerId: string,
+): Promise<Row> {
+  const { data: existing, error: fetchError } = await supabase
+    .from("lookup_options")
+    .select("code")
+    .eq("list_key", listKey);
+  if (fetchError) throw fetchError;
+
+  const codes = (existing ?? []).map((r) => (r as { code: string }).code ?? "");
+  const sample = codes.find((c) => /^[A-Za-z]+-\d+$/.test(c));
+  const dash = sample?.lastIndexOf("-") ?? -1;
+  const [prefix, width] =
+    sample && dash >= 0
+      ? [sample.slice(0, dash + 1).toUpperCase(), sample.length - dash - 1]
+      : [`${listKey.replace(/[^a-z]/gi, "").slice(0, 4).toUpperCase()}-`, 4];
+  const code = computeNextCode(codes, prefix, width);
+
+  const { data, error } = await supabase
+    .from("lookup_options")
+    .insert({ list_key: listKey, code, value, owner_id: ownerId })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Row;
+}
+
 /** Create a row, auto-generating its code and stamping owner_id. */
 export async function createRow(
   supabase: SupabaseClient,
@@ -40,7 +80,7 @@ export async function createRow(
   const { data, error } = await supabase
     .from(config.table)
     .insert({
-      ...clean(writable(config, values)),
+      ...clean(writable(config, values), config.fields),
       ...(code ? { code } : {}),
       ...(config.noOwner ? {} : { owner_id: ownerId }),
     })
@@ -59,7 +99,7 @@ export async function updateRow(
 ): Promise<Row> {
   const { data, error } = await supabase
     .from(config.table)
-    .update(clean(writable(config, values)))
+    .update(clean(writable(config, values), config.fields))
     .eq("id", id)
     .select()
     .single();
@@ -145,10 +185,10 @@ export async function saveLineItems(
       if (writableNames.has(k)) values[k] = v;
     }
     if (id) {
-      const { error } = await supabase.from(table).update(clean(values)).eq("id", id);
+      const { error } = await supabase.from(table).update(clean(values, fields)).eq("id", id);
       if (error) throw error;
     } else {
-      const { error } = await supabase.from(table).insert({ ...clean(values), [parentColumn]: parentId });
+      const { error } = await supabase.from(table).insert({ ...clean(values, fields), [parentColumn]: parentId });
       if (error) throw error;
     }
   }
@@ -173,11 +213,27 @@ function writable(
   return out;
 }
 
-/** Drop empty-string values so they land as NULL, not "". */
-export function clean(values: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Drop empty-string values so they land as NULL, not "" -- except for a
+ * field with a `defaultValue` (e.g. capex_budgets.committed_amount, `not
+ * null default 0` in Postgres: optional in the form, but an explicit null
+ * still trips the not-null constraint). A cleared field like that falls back
+ * to its defaultValue instead of null, mirroring what the DB default would
+ * have produced if the column had been omitted entirely.
+ */
+export function clean(
+  values: Record<string, unknown>,
+  fields: FieldDef[] = [],
+): Record<string, unknown> {
+  const defaultsByName = new Map(fields.map((f) => [f.name, f.defaultValue]));
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(values)) {
-    out[k] = v === "" ? null : v;
+    if (v !== "") {
+      out[k] = v;
+      continue;
+    }
+    const d = defaultsByName.get(k);
+    out[k] = d !== undefined ? d : null;
   }
   return out;
 }

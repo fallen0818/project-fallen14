@@ -33,7 +33,7 @@ export default async function DashboardPage() {
   // regardless of actual data.
   const [budgets, requests, pos, charters, milestones, risks] = await Promise.all([
     supabase.from("capex_budgets").select("allocated_amount, committed_amount, spent_amount"),
-    supabase.from("asset_requests").select("status:lookup_options!status_id(value)"),
+    supabase.from("asset_requests").select("estimated_cost, status:lookup_options!status_id(value)"),
     supabase.from("purchase_orders").select("total"),
     supabase.from("project_charters").select("status:lookup_options!status_id(value)"),
     supabase.from("milestones").select("physical_progress_percent"),
@@ -44,6 +44,7 @@ export default async function DashboardPage() {
 
   const budgetRows = budgets.data ?? [];
   const requestRows = (requests.data ?? []).map((r) => ({
+    estimated_cost: r.estimated_cost,
     status: (r.status as unknown as StatusJoin)?.value ?? "Unknown",
   }));
   const poRows = pos.data ?? [];
@@ -57,7 +58,15 @@ export default async function DashboardPage() {
   }));
 
   const allocated = sum(budgetRows, "allocated_amount");
-  const committed = sum(budgetRows, "committed_amount");
+  // Committed now tracks real Asset Request asks instead of capex_budgets'
+  // own hand-typed committed_amount column -- same "make the number reflect
+  // actual linked data" fix as Estimated Cost auto-following its BOM total.
+  // Draft isn't a commitment yet (not even submitted), and Rejected/
+  // Cancelled are dead ends that were never going to spend -- everything
+  // else (Submitted, Under Review, Approved, Procured) counts as committed
+  // budget, whether or not it's been formally approved yet.
+  const committedRequests = requestRows.filter((r) => !["Draft", "Rejected", "Cancelled"].includes(r.status));
+  const committed = sum(committedRequests, "estimated_cost");
   const poTotal = sum(poRows, "total");
   const openRisks = riskRows.filter((r) => !["Resolved", "Closed"].includes(r.status)).length;
   const avgProgress =
@@ -71,7 +80,12 @@ export default async function DashboardPage() {
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
         <StatCard accent="var(--primary)" label="Capex Allocated" value={formatCurrency(allocated)} hint={`${budgetRows.length} budgets`} />
-        <StatCard accent="var(--secondary)" label="Committed" value={formatCurrency(committed)} hint={allocated > 0 ? `${((committed / allocated) * 100).toFixed(0)}% of allocation` : "—"} />
+        <StatCard
+          accent="var(--secondary)"
+          label="Committed"
+          value={formatCurrency(committed)}
+          hint={`${committedRequests.length} active requests${allocated > 0 ? ` · ${((committed / allocated) * 100).toFixed(0)}% of allocation` : ""}`}
+        />
         <StatCard accent="var(--tertiary)" label="PO Value Issued" value={formatCurrency(poTotal)} hint={`${poRows.length} purchase orders`} />
         <StatCard accent="var(--success)" label="Active Projects" value={String(charterRows.filter((c) => c.status === "Active").length)} hint={`${charterRows.length} total`} />
         <StatCard accent="var(--warning)" label="Avg Milestone Progress" value={`${avgProgress.toFixed(0)}%`} hint={`${milestoneRows.length} milestones`} />

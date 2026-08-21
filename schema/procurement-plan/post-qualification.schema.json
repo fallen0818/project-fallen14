@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/post-qualification.schema.json",
+  "title": "Post-Qualification",
+  "description": "New since the pre-restructure schema set (migration 0042). The RA 9184 step after Bid Evaluation and before Award/PO: verify the winning bidder's documents, run a site/equipment inspection, check financial capacity (NFCC/SLCC), and record a final Pass/Fail decision. Matches public.post_qualifications, with public.post_qualification_checklist embedded as the `checklist` array. Linked to the winning Supplier or Contractor directly, not to a specific Vendor Bid row. Not wired as a gate on Purchase Orders -- a PO can be created regardless of this record's decision.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "code", "activityId", "decisionId", "ownerId"],
+  "not": { "required": ["winningVendorId", "winningContractorId"] },
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^PRC-PQ-[0-9]{6}$", "examples": ["PRC-PQ-000001"] },
+    "activityId": { "description": "FK -> procurement-plan/procurement-activity.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "winningVendorId": { "description": "FK -> reference-data/vendor.id. Mutually exclusive with winningContractorId.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "winningContractorId": { "description": "FK -> reference-data/contractor.id. Mutually exclusive with winningVendorId.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "nfccAmount": { "description": "Net Financial Contracting Capacity, checked against the project's approved budget.", "$ref": "../common.schema.json#/$defs/money" },
+    "slccAmount": { "description": "Single Largest Completed Contract, within the relevant period.", "$ref": "../common.schema.json#/$defs/money" },
+    "siteInspectionResultId": { "description": "FK -> lookup_options.id, list_key = 'post_qualification_result' (Passed, Failed, Not Applicable).", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "siteInspectionNotes": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "decisionId": { "description": "FK -> lookup_options.id, list_key = 'post_qualification_status' (Pending, Passed, Failed).", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "decidedBy": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "decisionDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "notes": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "checklist": {
+      "description": "public.post_qualification_checklist rows -- a plain per-document Pass/Fail scoped to this one winning bidder (unlike the many-bidder Bid Evaluation matrix, only one bidder is ever in play here).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/checklistItem" }
+    },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  },
+  "$defs": {
+    "checklistItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "postQualificationId", "section", "documentName"],
+      "properties": {
+        "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "postQualificationId": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "section": { "type": "string", "minLength": 1, "maxLength": 100, "examples": ["Legal", "Technical", "Financial"] },
+        "documentName": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "passed": { "type": "boolean", "default": false },
+        "remarks": { "$ref": "../common.schema.json#/$defs/optionalText" }
+      }
+    }
+  }
+}

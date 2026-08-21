@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/common.schema.json",
+  "title": "Common Definitions",
+  "description": "Shared $defs reused across every module (capex-plan, procurement-plan, project-monitoring, reference-data). Mirrors the live Postgres schema's actual constraints -- e.g. currency is the DB's own `^[A-Z]{3}$` check, not a curated ISO-4217 enum -- so this file stays a true reflection of supabase/migrations/, not an idealized version of it.",
+  "$defs": {
+    "uuid": { "type": "string", "format": "uuid" },
+    "money": { "type": "number", "minimum": 0, "maximum": 1000000000 },
+    "currency": {
+      "description": "ISO 4217-shaped currency code. The DB only checks the 3-uppercase-letter shape (`currency ~ '^[A-Z]{3}$'`), not membership in the real ISO 4217 list -- documented as-is rather than tightened, since tightening it here would describe a stricter system than the one actually running.",
+      "type": "string",
+      "pattern": "^[A-Z]{3}$"
+    },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "lookupRef": {
+      "description": "FK -> lookup_options.id. Which list_key is valid depends on the field; see that field's own description. Values are runtime data (editable by any authenticated user), not a fixed schema-level enum -- see reference-data/lookup-option.schema.json.",
+      "$ref": "#/$defs/uuid"
+    },
+    "nonEmptyText": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "longText": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "optionalText": { "type": "string", "maxLength": 500 }
+  }
+}

@@ -2,58 +2,62 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.com/project-monitoring/project-charter.schema.json",
   "title": "Project Charter",
-  "description": "Foundational definition of a project: scope, timeline, governance and baseline budget, linked to the capital expenditures that fund it.",
+  "description": "Scope, timeline & baseline budget for a delivered project. Matches public.project_charters, with public.project_charter_objectives embedded as `objectives` and the public.project_charter_funding join table (charterId, procurementItemId composite PK, no other columns) surfaced as `fundingProcurementItemIds`.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["projectId", "title", "sponsor", "projectManager", "startDate", "plannedEndDate", "baselineBudget", "currency", "status"],
+  "required": ["id", "code", "title", "sponsor", "projectManager", "startDate", "plannedEndDate", "baselineBudget", "currency", "statusId", "ownerId"],
   "properties": {
-    "projectId": {
-      "type": "string",
-      "pattern": "^PRJ-[0-9]{6}$",
-      "examples": ["PRJ-000010"]
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^PRJ-[0-9]{6}$", "examples": ["PRJ-000010"] },
+    "charterVersion": { "type": "integer", "minimum": 1, "default": 1 },
+    "title": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "description": { "$ref": "../common.schema.json#/$defs/longText" },
+    "sponsor": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "projectManager": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "scope": { "description": "Free-form scope document (jsonb).", "type": "object" },
+    "purchaseOrderId": {
+      "description": "FK -> procurement-plan/purchase-order.id. Nullable -- on_delete set null (migration 0054). Wires this Charter to Procurement: linking a PO pulls its ntpDate into startDate immediately (trigger), and keeps following it if the PO's ntpDate changes later.",
+      "$ref": "../common.schema.json#/$defs/uuid"
     },
-    "charterVersion": {
-      "type": "integer",
-      "minimum": 1,
-      "default": 1
+    "startDate": {
+      "description": "Auto-follows the linked Purchase Order's ntpDate once purchaseOrderId is set (migration 0054, trigger-maintained). A normal manually-entered field otherwise -- not readOnly, since a Charter can exist before procurement even starts.",
+      "$ref": "../common.schema.json#/$defs/date"
     },
-    "title": { "$ref": "#/$defs/nonEmptyString" },
-    "description": { "type": "string" },
-    "sponsor": { "$ref": "#/$defs/nonEmptyString" },
-    "projectManager": { "$ref": "#/$defs/nonEmptyString" },
+    "plannedEndDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "baselineBudget": { "$ref": "../common.schema.json#/$defs/money" },
+    "currency": { "$ref": "../common.schema.json#/$defs/currency" },
+    "statusId": { "description": "FK -> lookup_options.id, list_key = 'project_status'.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "overallProgressPercent": {
+      "description": "Trigger-maintained (migration 0022): (Milestones with status = Completed) / (total Milestones) x 100. Count-based, not weighted -- milestones.weight exists but isn't used by this formula. Read-only.",
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
     "objectives": {
+      "description": "public.project_charter_objectives rows.",
       "type": "array",
-      "items": { "type": "string", "minLength": 1 }
+      "items": { "$ref": "#/$defs/objective" }
     },
-    "scope": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "inScope": { "type": "array", "items": { "type": "string" } },
-        "outOfScope": { "type": "array", "items": { "type": "string" } }
-      }
-    },
-    "startDate": { "$ref": "#/$defs/date" },
-    "plannedEndDate": { "$ref": "#/$defs/date" },
-    "baselineBudget": { "$ref": "#/$defs/money" },
-    "currency": { "$ref": "#/$defs/currency" },
-    "fundingCapexRequestIds": {
-      "description": "Approved asset requests funding this project. FK -> capex-plan/asset-request.requestId.",
+    "fundingProcurementItemIds": {
+      "description": "Backed by the public.project_charter_funding join table -- Procurement Items that fund this charter.",
       "type": "array",
-      "items": { "type": "string", "pattern": "^CAPEX-[0-9]{6}$" }
+      "items": { "$ref": "../common.schema.json#/$defs/uuid" }
     },
-    "status": {
-      "type": "string",
-      "enum": ["proposed", "chartered", "active", "on-hold", "completed", "cancelled"]
-    },
-    "createdAt": { "$ref": "#/$defs/timestamp" },
-    "updatedAt": { "$ref": "#/$defs/timestamp" }
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
   },
   "$defs": {
-    "nonEmptyString": { "type": "string", "minLength": 1 },
-    "money": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "date": { "type": "string", "format": "date" },
-    "timestamp": { "type": "string", "format": "date-time" }
+    "objective": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "charterId", "objective"],
+      "properties": {
+        "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "charterId": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "objective": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+        "sortOrder": { "type": "integer", "default": 0 }
+      }
+    }
   }
 }

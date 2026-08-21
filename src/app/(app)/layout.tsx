@@ -24,11 +24,9 @@ export default async function AppLayout({
 
   return (
     <RoleProvider role={role}>
-      <div style={{ display: "flex", minHeight: "100vh" }}>
+      <div className="app-shell">
         <Sidebar email={user.email ?? "user@example.com"} role={role} />
-        <main style={{ flex: 1, padding: "2rem 2.5rem", maxWidth: "1400px" }}>
-          {children}
-        </main>
+        <main className="app-main">{children}</main>
       </div>
     </RoleProvider>
   );

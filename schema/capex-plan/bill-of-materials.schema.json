@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/capex-plan/bill-of-materials.schema.json",
+  "title": "Bill of Materials",
+  "description": "New since the pre-restructure schema set (migration 0019). The flat engineering/spec parts list for one Asset Request, one BOM per request. Matches public.bill_of_materials, with public.bill_of_materials_lines embedded as the `lines` array. A finalized line can be converted into a Procurement Item (see procurement-plan/procurement-item.schema.json) via the app's 'Generate Procurement Items from Parts List' action -- lines.procurementItemId records that link once made.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "code", "assetRequestId", "statusId", "ownerId"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^BOM-[0-9]{6}$", "examples": ["BOM-000001"] },
+    "assetRequestId": { "description": "FK -> capex-plan/asset-request.id. One BOM per Asset Request (unique).", "$ref": "../common.schema.json#/$defs/uuid" },
+    "title": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "statusId": { "description": "FK -> lookup_options.id, list_key = 'bom_status' (Draft, Submitted, Approved, Converted, Cancelled). Informational only -- not enforced as an edit-lock.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "preparedBy": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "estimatedTotalCost": {
+      "description": "Trigger-maintained sum of lines[].estimatedTotalCost (migration 0025). Read-only from the app's perspective.",
+      "$ref": "../common.schema.json#/$defs/money"
+    },
+    "notes": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "lines": {
+      "description": "public.bill_of_materials_lines rows for this BOM.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/line" }
+    },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  },
+  "$defs": {
+    "line": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "bomId", "partName", "quantity", "unitOfMeasure"],
+      "properties": {
+        "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "bomId": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "partName": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+        "partNumber": { "$ref": "../common.schema.json#/$defs/optionalText" },
+        "categoryId": { "description": "FK -> lookup_options.id, list_key = 'procurement_category'.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+        "quantity": { "type": "number", "exclusiveMinimum": 0, "maximum": 100000 },
+        "unitOfMeasure": { "type": "string", "minLength": 1, "maxLength": 20 },
+        "estimatedUnitCost": { "description": "Optional at this stage -- refined once real quotes come in.", "$ref": "../common.schema.json#/$defs/money" },
+        "estimatedTotalCost": { "description": "Generated column: quantity * estimatedUnitCost.", "$ref": "../common.schema.json#/$defs/money" },
+        "procurementItemId": { "description": "FK -> procurement-plan/procurement-item.id, set once this line is converted. Partial-unique live (a Procurement Item can only be claimed by one line).", "$ref": "../common.schema.json#/$defs/uuid" }
+      }
+    }
+  }
+}

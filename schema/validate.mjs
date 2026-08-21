@@ -8,7 +8,13 @@ import addFormats from "ajv-formats";
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 addFormats(ajv);
 
-const dirs = ["capex-plan", "procurement-plan", "project-monitoring"];
+// common.schema.json lives at the repo root and is $ref'd by every module
+// (e.g. "../common.schema.json#/$defs/money") -- register it first so those
+// relative refs resolve.
+const common = JSON.parse(readFileSync("common.schema.json", "utf8"));
+ajv.addSchema(common, common.$id);
+
+const dirs = ["capex-plan", "procurement-plan", "project-monitoring", "reference-data"];
 const schemas = {};
 
 for (const d of dirs) {
@@ -36,16 +42,25 @@ for (const [path, schema] of Object.entries(schemas)) {
 const example = JSON.parse(readFileSync("examples/lifecycle-example.json", "utf8"));
 const map = {
   "capex-budget": "capex-plan/capex-budget.schema.json",
-  "asset-request": "capex-plan/asset-request.schema.json",
   "approval-matrix": "capex-plan/approval-matrix.schema.json",
+  "asset-request": "capex-plan/asset-request.schema.json",
+  "bill-of-materials": "capex-plan/bill-of-materials.schema.json",
   "procurement-item": "procurement-plan/procurement-item.schema.json",
   "purchase-requisition": "procurement-plan/purchase-requisition.schema.json",
-  "vendor-bidding": "procurement-plan/vendor-bidding.schema.json",
+  "procurement-activity": "procurement-plan/procurement-activity.schema.json",
+  "vendor-bid": "procurement-plan/vendor-bid.schema.json",
+  "rfq-document-checklist": "procurement-plan/rfq-document-checklist.schema.json",
+  "rfq-checklist-result": "procurement-plan/rfq-checklist-result.schema.json",
+  "post-qualification": "procurement-plan/post-qualification.schema.json",
   "purchase-order": "procurement-plan/purchase-order.schema.json",
   "project-charter": "project-monitoring/project-charter.schema.json",
-  "milestone-tracker": "project-monitoring/milestone-tracker.schema.json",
+  "milestone": "project-monitoring/milestone.schema.json",
   "financial-tracking": "project-monitoring/financial-tracking.schema.json",
   "risk-issue-log": "project-monitoring/risk-issue-log.schema.json",
+  "vendor": "reference-data/vendor.schema.json",
+  "contractor": "reference-data/contractor.schema.json",
+  "lookup-option": "reference-data/lookup-option.schema.json",
+  "profile": "reference-data/profile.schema.json",
 };
 for (const [key, path] of Object.entries(map)) {
   const validate = ajv.compile(schemas[path]);

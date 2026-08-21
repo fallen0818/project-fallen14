@@ -8,9 +8,6 @@ const CURRENCY_HELP = "ISO 4217 code, e.g. PHP";
 const codeLabel = (r: Ref) => String(r.code ?? r.id);
 const codeTitleLabel = (r: Ref) =>
   `${r.code ?? ""}${r.title ? " · " + String(r.title) : r.name ? " · " + String(r.name) : ""}`;
-/** Display label for a procurement_items row: code + description (it has no title/name column). */
-const codeDescriptionLabel = (r: Ref) =>
-  `${r.code ?? ""}${r.description ? " · " + String(r.description) : ""}`;
 const nameLabel = (r: Ref) => String(r.name ?? r.id);
 /** Display label for a lookup_options row: its human-readable value. */
 const lookupLabel = (r: Ref) => String(r.value ?? r.id);
@@ -141,7 +138,8 @@ export const ENTITIES: EntityConfig[] = [
     ],
     // The flat parts list (engineering/spec layer). Each saved line can be
     // turned into a real Procurement Item — see convertTo below — which
-    // then goes through the existing RFQ/PO flow like any other item.
+    // then goes through the existing bid evaluation/PO flow like any other
+    // item.
     lineItems: {
       table: "bill_of_materials_lines",
       parentColumn: "bom_id",
@@ -173,7 +171,13 @@ export const ENTITIES: EntityConfig[] = [
       convertTo: {
         entityKey: "items",
         linkColumn: "procurement_item_id",
-        buttonLabel: "Generate Procurement Items from Parts List",
+        buttonLabel: "Generate Procurement Item from Parts List",
+        // procurement_items is one row per Asset Request (migration 0038),
+        // and every line on a BOM already shares the same Asset Request --
+        // so "Generate" must produce exactly one Procurement Item no matter
+        // how many parts are listed, not one per part (that was creating
+        // duplicate items, one per line, all pointing at the same request).
+        singleTargetPerParent: true,
         mapLine: async (line, parent, supabase) => {
           // procurement_item_status is a lookup_options id, generated per
           // environment — can't hardcode it, so resolve the first status by
@@ -186,14 +190,14 @@ export const ENTITIES: EntityConfig[] = [
             .order("code")
             .limit(1)
             .single();
-          const partNumber = line.part_number ? String(line.part_number) : "";
+          // Category/Description/Quantity/Unit Cost no longer exist on
+          // procurement_items (migration 0038) -- a generated item now
+          // carries only its link back to the Asset Request, Unit, and
+          // Status; cost arrives on its own via the same request-linked
+          // sync trigger every other item's cost goes through.
           return {
             capex_request_id: parent.asset_request_id,
-            description: partNumber ? `${line.part_name} (${partNumber})` : line.part_name,
-            category_id: line.category_id,
-            quantity: line.quantity,
             unit_of_measure: line.unit_of_measure,
-            estimated_unit_cost: line.estimated_unit_cost || 0,
             currency: "PHP",
             status_id: status?.id,
           };
@@ -214,19 +218,53 @@ export const ENTITIES: EntityConfig[] = [
     breadcrumb: "Procurement Plan",
     primaryField: "code",
     makeCode: (sb) => nextSequentialCode(sb, "procurement_items", "PRC-ITEM-", 6),
+    // Category, Description, Quantity, and Unit Cost were dropped from this
+    // entity (migration 0038) -- an item is one-per-Asset-Request, so the
+    // Asset Request's own Title/Description already says what it is, and
+    // its Estimated Cost already says what it costs as one flat figure
+    // (no separate qty x unit-cost breakdown at this level anymore).
+    //
+    // Field order below follows the actual process (per the user's own
+    // description of it): an approved Asset Request lands here first: pick
+    // its Mode of Procurement based on the now-known approved amount (Total
+    // Cost, below), *then* decide which Requisition it belongs to (items
+    // headed for the same mode are what typically get batched into one
+    // Requisition together) -- migration 0048.
     fields: [
       { name: "capex_request_id", label: "Capex Request", type: "reference", refTable: "asset_requests", refLabel: codeTitleLabel, required: true, inList: true },
-      { name: "description", label: "Description", type: "text", required: true, inList: true },
-      { name: "category_id", label: "Category", type: "reference", ...lookupRef("procurement_category"), required: true, inList: true },
-      { name: "quantity", label: "Quantity", type: "number", required: true, inList: true },
-      { name: "unit_of_measure", label: "Unit", type: "text", required: true, placeholder: "each" },
-      { name: "estimated_unit_cost", label: "Unit Cost", type: "currency", required: true },
-      { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
-      { name: "estimated_total_cost", label: "Total Cost", type: "currency", inList: true, readOnly: true, help: "Quantity × Unit Cost" },
-      { name: "preferred_vendor_id", label: "Preferred Supplier", type: "reference", refTable: "vendors", refLabel: nameLabel, help: "Set a supplier or a contractor, not both" },
-      { name: "preferred_contractor_id", label: "Preferred Contractor", type: "reference", refTable: "contractors", refLabel: nameLabel },
+      // Decided here, not on the Requisition or Activity -- this is the
+      // earliest point the approved amount is known (Total Cost, below),
+      // and which mode applies is what determines which Requisition this
+      // item should even be grouped into (migration 0048).
+      { name: "mode_id", label: "Mode of Procurement", type: "reference", ...lookupRef("procurement_mode"), required: true, inList: true, help: "Public Bidding, Simplified, or Shopping — decide based on the approved amount (Total Cost, below)" },
+      // Locked to the linked Asset Request's Estimated Cost (migration
+      // 0035, retargeted in 0038 from Unit Cost to this field directly) --
+      // never independently entered here. Cascades from the BOM -> Asset
+      // Request sync (0034), so a parts-list edit flows all the way down.
+      // Shown here (ahead of Requisition/Status) since it's what Mode of
+      // Procurement above should actually be decided from.
+      { name: "estimated_total_cost", label: "Total Cost", type: "currency", inList: true, readOnly: true, help: "Auto-copied from the linked Capex Request's Estimated Cost" },
+      // Requisition, Currency, and Unit of Measure were removed from this
+      // form by request (migration 0053):
+      //  - requisition_id: still app-editable, just from the Purchase
+      //    Requisition's own reverseLookup editor instead of duplicated
+      //    here (an item can still exist unlinked -- on delete set null).
+      //  - currency: every row in practice is already PHP (the form
+      //    default, and the only value the BOM-conversion flow ever wrote)
+      //    -- migration 0053 gave the column its own DB default so a
+      //    create that no longer submits this field still gets a valid,
+      //    non-null "PHP".
+      //  - unit_of_measure: genuinely varies per item (each/hour/licence/
+      //    kg/m/lot) with no single correct default to hide it behind, so
+      //    migration 0053 dropped its not-null constraint instead --
+      //    new items just have no unit recorded unless set elsewhere.
       { name: "status_id", label: "Status", type: "reference", ...lookupRef("procurement_item_status"), required: true, inList: true, badge: true },
     ],
+    // Date of Bidding dropped, and items go back to always being editable
+    // and deletable no matter what Status is set to -- the earlier "lock
+    // once terminal" behavior (migration 0044, EntityConfig.lockWhenTerminal)
+    // was undone by the user's own call (migration 0050); Status itself is
+    // unaffected, still a normal editable dropdown/badge.
   },
   {
     key: "vendors",
@@ -284,100 +322,103 @@ export const ENTITIES: EntityConfig[] = [
     breadcrumb: "Procurement Plan",
     primaryField: "code",
     makeCode: (sb) => nextSequentialCode(sb, "purchase_requisitions", "PR-", 6),
+    // Title, Estimated Total, Currency, and the "+ Add Item" Procurement
+    // Items line list were all dropped (migration 0046) -- that multi-item
+    // list was the only link to Procurement Items at the time, and it was
+    // removed by the user's own call. The link exists again now, just from
+    // the item's side instead (Procurement Item's own Requisition field,
+    // migration 0047) -- one item picks its one requisition, rather than a
+    // requisition owning a list of items. That still left Bid Evaluation's
+    // old per-item pricing without a home (see BidEvaluationMatrix.tsx).
+    //
+    // A Requisition's real job is being the approval gate, not a scheduling
+    // record (the user's own framing) -- trimmed down accordingly (migration
+    // 0049) to just who's asking, the decision, and the decision trail.
+    // Requisition Date and Required By were dropped; `created_at` (already
+    // shown in the edit modal header) covers "when this was raised" well
+    // enough without a duplicate field.
     fields: [
-      { name: "title", label: "Title", type: "text", inList: true },
       { name: "requested_by", label: "Requested By", type: "text", required: true, inList: true },
       { name: "department", label: "Department", type: "text", required: true, inList: true },
-      { name: "requisition_date", label: "Requisition Date", type: "date", required: true },
-      { name: "required_by_date", label: "Required By", type: "date" },
-      // Not trigger-linked to the line items below -- unlike bom's
-      // estimated_total_cost (migration 0025), this one stays a manually
-      // entered planning figure. The line items' own footer total (below)
-      // is a separate, itemized cross-check once items are actually attached.
-      { name: "estimated_total", label: "Estimated Total", type: "currency", inList: true },
-      { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
       { name: "status_id", label: "Status", type: "reference", ...lookupRef("requisition_status"), required: true, inList: true, badge: true },
-      { name: "approved_by", label: "Approved By", type: "text" },
+      { name: "approved_by", label: "Approved By", type: "text", inList: true },
+      { name: "approved_date", label: "Approved Date", type: "date" },
     ],
-    // The actual link from a requisition to the procurement items it covers
-    // -- purchase_requisition_lines already existed live (migration 0001)
-    // with full owner-scoped RLS (prl_write) but had no frontend anywhere,
-    // so a requisition could never actually be tied to an item. This is also
-    // what the Bid Evaluation matrix's per-item pricing (see /bid-evaluation)
-    // reads from: RFQ -> requisition -> these lines -> procurement_items.
-    lineItems: {
-      table: "purchase_requisition_lines",
-      parentColumn: "requisition_id",
-      label: "Procurement Items",
-      addLabel: "+ Add Item",
-      fields: [
-        { name: "procurement_item_id", label: "Procurement Item", type: "reference", refTable: "procurement_items", refLabel: codeDescriptionLabel, required: true },
-        { name: "quantity", label: "Qty", type: "number", required: true },
-        { name: "estimated_unit_cost", label: "Unit Cost", type: "currency", help: "Optional -- defaults to the item's own estimated unit cost if left blank during sourcing" },
-        {
-          name: "line_total",
-          label: "Extended Cost",
-          type: "currency",
-          readOnly: true,
-          compute: (line) => Number(line.quantity || 0) * Number(line.estimated_unit_cost || 0),
-          help: "Qty × Unit Cost (not stored -- computed for display only)",
-        },
-        { name: "notes", label: "Notes", type: "text" },
-      ],
-      emptyLine: () => ({ procurement_item_id: "", quantity: "", estimated_unit_cost: "", notes: "" }),
-      totalField: "line_total",
-      totalLabel: "Items Total",
+    // Editable from this side too (not just the Procurement Item's own
+    // "Requisition" field, migration 0047) -- a dropdown of unlinked items
+    // right here, per the user's own ask for a way to pick a Procurement
+    // Item while looking at the Requisition itself.
+    reverseLookup: {
+      table: "procurement_items",
+      column: "requisition_id",
+      label: "Linked Procurement Items",
+      entityKey: "items",
+      refLabel: codeLabel,
+      editable: true,
     },
   },
   {
-    key: "rfqs",
-    table: "vendor_biddings",
-    singular: "RFQ",
-    plural: "Vendor Bidding (RFQs)",
+    key: "procurement-activities",
+    table: "procurement_activities",
+    singular: "Procurement Activity",
+    plural: "Procurement Activities",
     module: "procurement",
     breadcrumb: "Procurement Plan",
     primaryField: "code",
-    makeCode: (sb) => nextSequentialCode(sb, "vendor_biddings", "RFQ-", 6),
+    makeCode: (sb) => nextSequentialCode(sb, "procurement_activities", "PRC-ACT-", 6),
+    // Wider than the generic line-items formula gives it -- Activity is a
+    // long free-text label ("Pre-bid Conference", "Opening of Bids", ...)
+    // and Remarks is free text too, so the auto-computed width still felt
+    // cramped with a real schedule of several lines.
+    modalWidth: "1200px",
     fields: [
       { name: "requisition_id", label: "Requisition", type: "reference", refTable: "purchase_requisitions", refLabel: codeLabel, required: true, inList: true },
-      { name: "title", label: "Title", type: "text", inList: true },
-      { name: "issue_date", label: "Issue Date", type: "date", required: true, inList: true },
-      { name: "close_date", label: "Close Date", type: "date", required: true },
-      { name: "currency", label: "Currency", type: "text", placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },
-      { name: "status_id", label: "Status", type: "reference", ...lookupRef("rfq_status"), required: true, inList: true, badge: true },
-      { name: "awarded_vendor_id", label: "Awarded Supplier", type: "reference", refTable: "vendors", refLabel: nameLabel, help: "Must already have a bid on this RFQ. Award a supplier or a contractor, not both." },
-      { name: "awarded_contractor_id", label: "Awarded Contractor", type: "reference", refTable: "contractors", refLabel: nameLabel },
+      // The formal record of which method this specific activity/event is
+      // executing under -- should match whatever was already decided on the
+      // Procurement Items that were batched into this Requisition (see
+      // "items" -> mode_id, migration 0048, where that call actually gets
+      // made). Kept as its own field here rather than derived, since an
+      // Activity is the real record of the event itself (e.g. you can't run
+      // a Public Bidding activity for items tagged Shopping). Also decides
+      // what happens next -- Public Bidding implies a formal bid opening,
+      // Simplified/Shopping are meant to skip it -- though the actual
+      // branching on this value isn't wired up yet (per the user's own
+      // call: "we will revise the process" separately).
+      { name: "mode_id", label: "Mode of Procurement", type: "reference", ...lookupRef("procurement_mode"), required: true, inList: true },
+      { name: "notes", label: "Notes", type: "textarea" },
     ],
-    // Bidding schedule: Pre-bid Conference, Opening of Bids, Post-qualification,
-    // Award, ... each with its own planned date and status. Originally lived
-    // per Procurement Item (migration 0007), but the schedule is really one
-    // shared event per RFQ -- every item bundled into the same RFQ goes
-    // through the same Opening of Bids, not a separate one each -- so it was
-    // re-keyed to the RFQ itself (migration 0031), same reasoning as why the
-    // Bid Evaluation matrix (see /bid-evaluation) is anchored to the RFQ
-    // rather than to individual items.
+    // Activity/Date/Status live here now, one line per schedule step (Pre-bid
+    // Conference, Opening of Bids, Award...) instead of on the record itself
+    // (migration 0043) -- one Requisition + Mode of Procurement can cover a
+    // whole schedule instead of needing a separate top-level record per
+    // step. Bid Evaluation and Post-Qualification now identify a record by
+    // its code + Requisition + Mode rather than a single Activity name,
+    // since that name no longer lives on the parent row.
     lineItems: {
-      table: "bidding_schedule_activities",
-      parentColumn: "bidding_id",
-      label: "Bidding Schedule Activities",
-      addLabel: "+ Add Activity",
+      table: "procurement_activity_lines",
+      parentColumn: "procurement_activity_id",
+      label: "Activity Schedule",
+      addLabel: "+ Add Line",
       fields: [
         { name: "activity", label: "Activity", type: "text", required: true, placeholder: "e.g. Pre-bid Conference, Opening of Bids" },
-        { name: "planned_date", label: "Planned Date", type: "date", required: true },
-        { name: "status_id", label: "Status", type: "reference", ...lookupRef("bidding_activity_status"), required: true },
+        { name: "activity_date", label: "Date", type: "date", required: true },
+        { name: "status_id", label: "Status", type: "reference", ...lookupRef("procurement_activity_status"), required: true },
+        { name: "remarks", label: "Remarks", type: "text" },
       ],
-      emptyLine: () => ({ activity: "", planned_date: "", status_id: "" }),
+      emptyLine: () => ({ activity: "", activity_date: "", status_id: "", remarks: "" }),
     },
   },
   {
-    // Standalone module for the required-documents *template* per RFQ --
-    // which documents bidders must submit, grouped by section (see the
-    // bid-evaluation matrix at /bid-evaluation for the actual per-bidder
-    // Pass/Fail grid, bid offers, and bid security -- this page just manages
-    // the list of required documents each RFQ needs). No owner_id column on
-    // this table -- writes are gated by owns_rfq() via the parent RFQ
-    // instead, see supabase/migrations/0020_rfq_document_checklist.sql and
-    // 0021_bid_evaluation_matrix.sql.
+    // Standalone module for the required-documents *template* per bid
+    // evaluation -- which documents bidders must submit, grouped by section
+    // (see the bid-evaluation matrix at /bid-evaluation for the actual
+    // per-bidder Pass/Fail grid, bid offers, and bid security -- this page
+    // just manages the list of required documents). No owner_id column on
+    // this table -- writes are gated by owns_procurement_activity() via the
+    // parent Procurement Activity instead, see supabase/migrations/
+    // 0020_rfq_document_checklist.sql, 0021_bid_evaluation_matrix.sql, and
+    // 0041_retire_vendor_bidding_module_for_procurement_activities.sql
+    // (retargeted from the now-retired Vendor Bidding/RFQ module).
     key: "rfq-checklist",
     table: "rfq_document_checklist",
     singular: "Bid Document Checklist Item",
@@ -387,11 +428,73 @@ export const ENTITIES: EntityConfig[] = [
     primaryField: "document_name",
     noOwner: true,
     fields: [
-      { name: "bidding_id", label: "RFQ", type: "reference", refTable: "vendor_biddings", refLabel: codeTitleLabel, required: true, inList: true },
+      { name: "activity_id", label: "Procurement Activity", type: "reference", refTable: "procurement_activities", refLabel: codeLabel, required: true, inList: true },
       { name: "section", label: "Section", type: "text", required: true, placeholder: "e.g. Administrative, Technical, Legal, Financial", inList: true },
       { name: "document_name", label: "Document Name", type: "text", required: true, placeholder: "e.g. Bid Bond", inList: true },
       { name: "remarks", label: "Remarks", type: "textarea" },
     ],
+  },
+  {
+    // The RA 9184 step after Bid Evaluation and before Award/PO: verify
+    // the winning bidder's legal/technical/financial documents, run a
+    // site/equipment inspection, check financial capacity (NFCC/SLCC), and
+    // record a final Passed/Failed decision. Linked to the winning
+    // supplier or contractor directly (migration 0042) -- not to a
+    // specific vendor_bids row -- and kept a standalone module rather than
+    // built into Bid Evaluation or Purchase Orders, per the user's own
+    // call. Not wired up as a gate on Purchase Orders -- a PO can still be
+    // created regardless of this module's decision, same
+    // intentionally-unautomated-branching approach as Procurement
+    // Activities' own Mode of Procurement (migration 0036).
+    key: "post-qualifications",
+    table: "post_qualifications",
+    singular: "Post-Qualification",
+    plural: "Post-Qualifications",
+    module: "procurement",
+    breadcrumb: "Procurement Plan",
+    primaryField: "code",
+    makeCode: (sb) => nextSequentialCode(sb, "post_qualifications", "PRC-PQ-", 6),
+    fields: [
+      { name: "activity_id", label: "Procurement Activity", type: "reference", refTable: "procurement_activities", refLabel: codeLabel, required: true, inList: true },
+      { name: "winning_vendor_id", label: "Winning Supplier", type: "reference", refTable: "vendors", refLabel: nameLabel, inList: true, help: "Set a supplier or a contractor, not both" },
+      { name: "winning_contractor_id", label: "Winning Contractor", type: "reference", refTable: "contractors", refLabel: nameLabel },
+      { name: "nfcc_amount", label: "Net Financial Contracting Capacity (NFCC)", type: "currency", help: "The bidder's computed NFCC, checked against the project's approved budget" },
+      { name: "slcc_amount", label: "Single Largest Completed Contract (SLCC)", type: "currency", help: "Value of the bidder's Single Largest Completed Contract within the relevant period" },
+      { name: "site_inspection_result_id", label: "Site Inspection Result", type: "reference", ...lookupRef("post_qualification_result"), inList: true, badge: true, help: "Leave as Not Applicable for procurements that don't require an inspection" },
+      { name: "site_inspection_notes", label: "Site Inspection Notes", type: "textarea" },
+      { name: "decision_id", label: "Decision", type: "reference", ...lookupRef("post_qualification_status"), required: true, inList: true, badge: true },
+      { name: "decided_by", label: "Decided By", type: "text" },
+      { name: "decision_date", label: "Decision Date", type: "date" },
+      { name: "notes", label: "Notes", type: "textarea" },
+    ],
+    // Per-document Pass/Fail checklist scoped to this one winning bidder --
+    // a plain boolean column per line is enough here since (unlike Bid
+    // Evaluation's rfq_document_checklist + rfq_checklist_results, which
+    // has to support many bidders against the same checklist) there's only
+    // ever one bidder in play. Pre-populated with a standard set of RA 9184
+    // post-qual documents so a fresh record doesn't start completely empty.
+    lineItems: {
+      table: "post_qualification_checklist",
+      parentColumn: "post_qualification_id",
+      label: "Post-Qualification Document Checklist",
+      addLabel: "+ Add Document",
+      fields: [
+        { name: "section", label: "Section", type: "text", required: true, placeholder: "e.g. Legal, Technical, Financial" },
+        { name: "document_name", label: "Document Name", type: "text", required: true },
+        { name: "passed", label: "Passed", type: "boolean" },
+        { name: "remarks", label: "Remarks", type: "text" },
+      ],
+      emptyLine: () => ({ section: "", document_name: "", passed: false, remarks: "" }),
+      defaultLines: () => [
+        { section: "Legal", document_name: "Updated PhilGEPS Registration", passed: false, remarks: "" },
+        { section: "Legal", document_name: "Valid Business/Mayor's Permit", passed: false, remarks: "" },
+        { section: "Legal", document_name: "Tax Clearance Certificate", passed: false, remarks: "" },
+        { section: "Technical", document_name: "Statement of Ongoing and Completed Contracts", passed: false, remarks: "" },
+        { section: "Technical", document_name: "List of Equipment and Key Personnel", passed: false, remarks: "" },
+        { section: "Financial", document_name: "Audited Financial Statements", passed: false, remarks: "" },
+        { section: "Financial", document_name: "NFCC / Credit Line Computation", passed: false, remarks: "" },
+      ],
+    },
   },
   {
     key: "purchase-orders",
@@ -403,7 +506,6 @@ export const ENTITIES: EntityConfig[] = [
     primaryField: "code",
     makeCode: (sb) => nextSequentialCode(sb, "purchase_orders", "PO-", 6),
     fields: [
-      { name: "rfq_id", label: "Source RFQ", type: "reference", refTable: "vendor_biddings", refLabel: codeLabel },
       { name: "requisition_id", label: "Requisition", type: "reference", refTable: "purchase_requisitions", refLabel: codeLabel },
       { name: "vendor_id", label: "Supplier", type: "reference", refTable: "vendors", refLabel: nameLabel, inList: true, help: "Set a supplier or a contractor, not both" },
       { name: "contractor_id", label: "Contractor", type: "reference", refTable: "contractors", refLabel: nameLabel, inList: true },
@@ -445,7 +547,15 @@ export const ENTITIES: EntityConfig[] = [
       { name: "sponsor", label: "Sponsor", type: "text", required: true, inList: true },
       { name: "project_manager", label: "Project Manager", type: "text", required: true, inList: true },
       { name: "charter_version", label: "Version", type: "number" },
-      { name: "start_date", label: "Start Date", type: "date", required: true },
+      // Wires the Charter to Procurement (migration 0054) -- picking a
+      // Purchase Order here pulls its Notice to Proceed date into Start
+      // Date below immediately, and keeps following it if the PO's NTP
+      // date changes later (trigger-maintained, same shape as the BOM ->
+      // Asset Request cost sync). Optional: a Charter can exist before
+      // procurement even starts, in which case Start Date is just a normal
+      // manually-entered field until a PO gets linked.
+      { name: "purchase_order_id", label: "Purchase Order (Notice to Proceed)", type: "reference", refTable: "purchase_orders", refLabel: codeLabel, inList: true, help: "Linking a PO pulls its Notice to Proceed date into Start Date, and keeps following it" },
+      { name: "start_date", label: "Start Date", type: "date", required: true, help: "Auto-follows the linked Purchase Order's Notice to Proceed date once one is linked; editable by hand otherwise" },
       { name: "planned_end_date", label: "Planned End", type: "date", required: true },
       { name: "baseline_budget", label: "Baseline Budget", type: "currency", required: true, inList: true },
       { name: "currency", label: "Currency", type: "text", required: true, placeholder: "PHP", defaultValue: "PHP", help: CURRENCY_HELP },

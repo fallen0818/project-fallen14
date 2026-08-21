@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/reference-data/profile.schema.json",
+  "title": "Profile",
+  "description": "App-level profile for one auth.users row (migration 0033, viewer/editor roles). Matches public.profiles. id is both PK and FK -> auth.users.id (1:1).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "role"],
+  "properties": {
+    "id": { "description": "FK -> auth.users.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "email": { "type": "string", "format": "email" },
+    "fullName": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "role": { "type": "string", "enum": ["viewer", "editor"], "default": "viewer" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  }
+}

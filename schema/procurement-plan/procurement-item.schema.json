@@ -2,58 +2,42 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.com/procurement-plan/procurement-item.schema.json",
   "title": "Procurement Item",
-  "description": "A discrete good or service to be sourced, traceable to an approved capital-expenditure asset request.",
+  "description": "One item to be sourced, one-per-Asset-Request. Matches public.procurement_items. Description/Category/Quantity/UnitCost were dropped from this table in migration 0038 -- the linked Asset Request already carries a title/description and a single estimated cost; this table is the sourcing-process record layered on top (mode, requisition, status), not a second copy of the spec.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["itemId", "capexRequestId", "description", "category", "quantity", "unitOfMeasure", "estimatedUnitCost", "currency"],
+  "required": ["id", "code", "capexRequestId", "currency", "statusId", "ownerId"],
   "properties": {
-    "itemId": {
-      "type": "string",
-      "pattern": "^PRC-ITEM-[0-9]{6}$",
-      "examples": ["PRC-ITEM-000101"]
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^PRC-ITEM-[0-9]{6}$", "examples": ["PRC-ITEM-000101"] },
+    "capexRequestId": { "description": "FK -> capex-plan/asset-request.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "modeId": {
+      "description": "FK -> lookup_options.id, list_key = 'procurement_mode' (Public Bidding, Simplified, Shopping). Nullable in the DB; the app form requires it before an item can be assigned to a Requisition (migration 0048).",
+      "$ref": "../common.schema.json#/$defs/lookupRef"
     },
-    "capexRequestId": {
-      "description": "Approved asset request this item fulfils. FK -> capex-plan/asset-request.requestId.",
-      "type": "string",
-      "pattern": "^CAPEX-[0-9]{6}$"
-    },
-    "description": { "$ref": "#/$defs/nonEmptyString" },
-    "category": {
-      "type": "string",
-      "enum": ["goods", "services", "works", "software-license", "subscription"]
-    },
-    "quantity": {
-      "type": "number",
-      "exclusiveMinimum": 0
-    },
-    "unitOfMeasure": {
-      "description": "Unit the quantity is expressed in.",
-      "type": "string",
-      "examples": ["each", "hour", "licence", "kg", "m", "lot"]
-    },
-    "estimatedUnitCost": { "$ref": "#/$defs/money" },
-    "currency": { "$ref": "#/$defs/currency" },
     "estimatedTotalCost": {
-      "description": "Convenience total (quantity x estimatedUnitCost). Systems may compute this.",
-      "$ref": "#/$defs/money"
+      "description": "Copied from the linked Asset Request's estimatedCost (migration 0035/0038), which itself may follow a linked BOM. Not independently entered here.",
+      "$ref": "../common.schema.json#/$defs/money"
+    },
+    "requisitionId": { "description": "FK -> procurement-plan/purchase-requisition.id. Nullable -- an item can exist before it's grouped into a Requisition; on_delete set null (migration 0047). Set from the Purchase Requisition's own reverseLookup editor, not this entity's form (migration 0053).", "$ref": "../common.schema.json#/$defs/uuid" },
+    "unitOfMeasure": {
+      "description": "Genuinely varies per item (each/hour/licence/kg/m/lot) with no single correct default -- made nullable rather than defaulted when removed from the app form (migration 0053). May be unset on items created after that migration.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 20
+    },
+    "currency": {
+      "description": "DB-defaulted to 'PHP' (migration 0053) -- no longer an app-editable field; every row still gets a non-null value, just not one entered through this entity's form.",
+      "$ref": "../common.schema.json#/$defs/currency"
     },
     "specifications": {
-      "description": "Free-form or structured technical requirements.",
+      "description": "Free-form technical requirements (jsonb). Bounded to a flat set of primitive values, not a general nested document store.",
       "type": "object",
-      "additionalProperties": true
+      "maxProperties": 30,
+      "additionalProperties": { "type": ["string", "number", "boolean", "null"] }
     },
-    "preferredVendorId": { "type": "string" },
-    "status": {
-      "type": "string",
-      "enum": ["identified", "requisitioned", "sourcing", "ordered", "received", "cancelled"],
-      "default": "identified"
-    },
-    "createdAt": { "$ref": "#/$defs/timestamp" }
-  },
-  "$defs": {
-    "nonEmptyString": { "type": "string", "minLength": 1 },
-    "money": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "timestamp": { "type": "string", "format": "date-time" }
+    "statusId": { "description": "FK -> lookup_options.id, list_key = 'procurement_item_status'. No terminal edit-lock (migration 0044 added one, migration 0050 removed it by the user's own call).", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
   }
 }

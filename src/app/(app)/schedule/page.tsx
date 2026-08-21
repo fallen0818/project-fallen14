@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-type Kind = "Requisition" | "RFQ" | "Purchase Order" | "Procurement Item" | "Bidding Activity";
+type Kind = "Requisition" | "Purchase Order" | "Procurement Item" | "Procurement Activity";
 
 interface Activity {
   kind: Kind;
@@ -21,10 +21,9 @@ interface Activity {
 // Fixed mid-tone colors (bars carry white text, so they must read in both themes).
 const KIND_COLOR: Record<Kind, string> = {
   Requisition: "#2f6bff",
-  RFQ: "#d98a1f",
   "Purchase Order": "#2e9e5b",
   "Procurement Item": "#8b5cf6",
-  "Bidding Activity": "#0d9488",
+  "Procurement Activity": "#0d9488",
 };
 
 /** Parse a YYYY-MM-DD (or ISO timestamp) string into {year, month(0-11)} without timezone drift. */
@@ -56,54 +55,64 @@ export default async function SchedulePage({
   // through years.
   const yearOptions = Array.from({ length: 11 }, (_, i) => thisYear - 5 + i);
 
-  // Status/category moved to lookup_options-backed *_id foreign keys (migrations
+  // Status moved to lookup_options-backed *_id foreign keys (migrations
   // 0008-0011), and purchase_orders.vendor_name was dropped in favor of
   // vendor_id/contractor_id (migration 0014/0016) -- these queries embed the
   // referenced tables to get back a human label instead of selecting columns
-  // that no longer exist. procurement_items has two FKs into lookup_options
-  // (category_id and status_id), so its status embed needs the `!status_id`
-  // hint to disambiguate; the other three tables have only one FK into
-  // lookup_options each, so it's unambiguous there.
-  const [reqs, rfqs, pos, items, bidActivities] = await Promise.all([
+  // that no longer exist. Each table here has only one FK into
+  // lookup_options, so the embed is unambiguous without a `!column` hint.
+  //
+  // The old standalone "RFQ" row (vendor_biddings) and "Bidding Activity"
+  // row (bidding_schedule_activities) are gone -- that whole module was
+  // retired in favor of Procurement Activities (migration 0041), whose own
+  // schedule steps (procurement_activity_lines, migration 0043) are what
+  // "Procurement Activity" below reads from now -- same single-planned-date
+  // marker behavior the old Bidding Activity row had, just from its
+  // successor table.
+  const [reqs, pos, items, pqActivities] = await Promise.all([
+    // Title, Requisition Date, and Required By were all dropped from
+    // purchase_requisitions -- a Requisition is now trimmed down to just
+    // being the approval record (migration 0049): who's asking, the
+    // decision, and the decision trail. Requested By + Department is the
+    // closest thing left to a human-readable label; with no date range of
+    // its own anymore, it shows as a single-day marker (Approved Date once
+    // set, else when it was raised) rather than a bar, same idea as a
+    // Procurement Activity's schedule steps below.
     supabase
       .from("purchase_requisitions")
-      .select("code, title, requisition_date, required_by_date, status:lookup_options!status_id(value)"),
-    supabase
-      .from("vendor_biddings")
-      .select("code, title, issue_date, close_date, status:lookup_options!status_id(value)"),
+      .select("code, requested_by, department, created_at, approved_date, status:lookup_options(value)"),
     supabase
       .from("purchase_orders")
-      .select("code, order_date, expected_delivery_date, status:lookup_options!status_id(value), vendor:vendors(name), contractor:contractors(name)"),
+      .select("code, order_date, expected_delivery_date, status:lookup_options(value), vendor:vendors(name), contractor:contractors(name)"),
+    // procurement_items dropped its own Description column (migration 0038)
+    // -- its linked Asset Request's Title is the closest thing it still has
+    // to a human-readable name, same fallback used in Bid Evaluation's own
+    // "Subject" line.
     supabase
       .from("procurement_items")
-      .select("code, description, created_at, status:lookup_options!status_id(value), asset_request:asset_requests(required_by_date)"),
-    // Bidding schedule activities (Pre-bid Conference, Opening of Bids, ...)
-    // added on a procurement item now show up here too, one row per
-    // activity, as soon as they're saved on the item's form.
+      .select("code, created_at, status:lookup_options(value), asset_request:asset_requests(title, required_by_date)"),
+    // Procurement Activity schedule steps (Pre-bid Conference, Opening of
+    // Bids, ...) show up here one row per step, as soon as they're saved on
+    // the Procurement Activity's own Activity Schedule line list.
     supabase
-      .from("bidding_schedule_activities")
-      .select("activity, planned_date, status:lookup_options!status_id(value), procurement_item:procurement_items(code)"),
+      .from("procurement_activity_lines")
+      .select("activity, activity_date, status:lookup_options(value), procurement_activity:procurement_activities(code)"),
   ]);
 
   type StatusJoin = { value: string } | null;
 
   const activities: Activity[] = [
-    ...(reqs.data ?? []).map((r) => ({
-      kind: "Requisition" as const,
-      code: String(r.code),
-      title: String(r.title ?? "Requisition"),
-      start: String(r.requisition_date),
-      end: String(r.required_by_date ?? r.requisition_date),
-      status: (r.status as unknown as StatusJoin)?.value ?? "—",
-    })),
-    ...(rfqs.data ?? []).map((r) => ({
-      kind: "RFQ" as const,
-      code: String(r.code),
-      title: String(r.title ?? "Request for Quotation"),
-      start: String(r.issue_date),
-      end: String(r.close_date ?? r.issue_date),
-      status: (r.status as unknown as StatusJoin)?.value ?? "—",
-    })),
+    ...(reqs.data ?? []).map((r) => {
+      const day = String(r.approved_date ?? r.created_at).slice(0, 10);
+      return {
+        kind: "Requisition" as const,
+        code: String(r.code),
+        title: r.requested_by ? `${r.requested_by}${r.department ? ` (${r.department})` : ""}` : "Requisition",
+        start: day,
+        end: day,
+        status: (r.status as unknown as StatusJoin)?.value ?? "—",
+      };
+    }),
     ...(pos.data ?? []).map((r) => ({
       kind: "Purchase Order" as const,
       code: String(r.code),
@@ -117,23 +126,26 @@ export default async function SchedulePage({
     // asset request needs it (required_by_date) -- the same "identified →
     // needed by" window the Capex Plan already tracks, so the schedule shows
     // how much runway procurement actually has to source and order it.
-    ...(items.data ?? []).map((r) => ({
-      kind: "Procurement Item" as const,
-      code: String(r.code),
-      title: String(r.description ?? "Procurement Item"),
-      start: String(r.created_at).slice(0, 10),
-      end: String((r.asset_request as unknown as { required_by_date: string } | null)?.required_by_date ?? String(r.created_at).slice(0, 10)),
-      status: (r.status as unknown as StatusJoin)?.value ?? "—",
-    })),
-    // Each bidding activity is a single planned date, not a range -- it
-    // renders as a one-month-wide marker (start === end) on whichever month
-    // that date falls in.
-    ...(bidActivities.data ?? []).map((r) => ({
-      kind: "Bidding Activity" as const,
-      code: String((r.procurement_item as unknown as { code: string } | null)?.code ?? "—"),
-      title: String(r.activity ?? "Bidding Activity"),
-      start: String(r.planned_date),
-      end: String(r.planned_date),
+    ...(items.data ?? []).map((r) => {
+      const assetRequest = r.asset_request as unknown as { title: string | null; required_by_date: string | null } | null;
+      return {
+        kind: "Procurement Item" as const,
+        code: String(r.code),
+        title: String(assetRequest?.title ?? "Procurement Item"),
+        start: String(r.created_at).slice(0, 10),
+        end: String(assetRequest?.required_by_date ?? String(r.created_at).slice(0, 10)),
+        status: (r.status as unknown as StatusJoin)?.value ?? "—",
+      };
+    }),
+    // Each schedule step is a single planned date, not a range -- it renders
+    // as a one-month-wide marker (start === end) on whichever month that
+    // date falls in.
+    ...(pqActivities.data ?? []).map((r) => ({
+      kind: "Procurement Activity" as const,
+      code: String((r.procurement_activity as unknown as { code: string } | null)?.code ?? "—"),
+      title: String(r.activity ?? "Procurement Activity"),
+      start: String(r.activity_date),
+      end: String(r.activity_date),
       status: (r.status as unknown as StatusJoin)?.value ?? "—",
     })),
   ];
@@ -265,9 +277,9 @@ export default async function SchedulePage({
       )}
 
       <p className="label-sm" style={{ textTransform: "none", letterSpacing: 0, marginTop: "1rem", color: "var(--on-surface-variant)" }}>
-        Requisitions span requisition → required-by; RFQs span issue → close; POs span order → expected delivery;
+        Requisitions mark a single date (Approved Date once set, else when raised); POs span order → expected delivery;
         Procurement Items span identified (created) → the linked asset request&apos;s required-by date;
-        Bidding Activities mark a single planned date (Pre-bid Conference, Opening of Bids, etc. — added from a procurement item&apos;s form).
+        Procurement Activities mark a single planned date (Pre-bid Conference, Opening of Bids, etc. — added from a Procurement Activity&apos;s own Activity Schedule).
         Hover a bar to see exact dates.
       </p>
     </>

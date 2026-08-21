@@ -42,6 +42,19 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+
+  /* Spacing scale (used by page shells / component gaps for consistency) */
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
+  --space-md: 1.25rem;
+  --space-lg: 2rem;
+  --space-xl: 2.5rem;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(25, 28, 30, 0.04), 0 8px 28px rgba(25, 28, 30, 0.06);
+  --shadow-md: 0 2px 4px rgba(25, 28, 30, 0.05), 0 14px 36px rgba(25, 28, 30, 0.1);
+
+  --sidebar-width: 260px;
 }
 
 @theme inline {
@@ -55,6 +68,24 @@
 
 * {
   box-sizing: border-box;
+}
+
+/* Visible keyboard focus everywhere, without adding an outline to mouse clicks. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 html,
@@ -119,11 +150,15 @@ h4 {
   cursor: not-allowed;
 }
 .btn-primary {
-  background: linear-gradient(135deg, var(--primary), var(--primary-container));
+  background: var(--primary);
   color: var(--on-primary);
+  box-shadow: 0 1px 2px rgba(25, 28, 30, 0.12);
 }
 .btn-primary:hover:not(:disabled) {
-  filter: brightness(1.08);
+  background: var(--primary-container);
+}
+.btn-primary:active:not(:disabled) {
+  filter: brightness(0.96);
 }
 .btn-secondary {
   background: var(--surface-container-high);
@@ -183,6 +218,24 @@ table tbody tr {
 table tbody tr:hover {
   background: var(--surface-container-low);
 }
+table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-container-lowest);
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--on-surface-variant);
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--outline-variant);
+}
+table tbody td {
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--outline-variant);
+}
 
 /* ---- Inputs (soft well, bottom accent) ------------------------------------- */
 .field-label {
@@ -235,54 +288,28 @@ table tbody tr:hover {
   color: var(--on-surface-variant);
 }
 /* Semantic overrides (hyphenated schema values). */
-.badge-approved, .badge-active, .badge-completed, .badge-received, .badge-paid, .badge-resolved, .badge-closed { background: #c7f0d0; color: var(--success); }
+.badge-approved, .badge-completed, .badge-received, .badge-paid, .badge-resolved, .badge-closed { background: #c7f0d0; color: var(--success); }
 .badge-flagged, .badge-rejected, .badge-cancelled, .badge-blocked, .badge-critical, .badge-escalated, .badge-delayed, .badge-severe { background: #ffdad6; color: var(--error); }
 .badge-high, .badge-major, .badge-at-risk, .badge-under-review, .badge-under-evaluation, .badge-on-hold { background: #ffe6c7; color: var(--warning); }
-.badge-in-progress, .badge-active, .badge-submitted, .badge-sourcing, .badge-monitoring, .badge-awarded, .badge-chartered, .badge-issued, .badge-proposed { background: #dae8ff; color: var(--primary); }
-.badge-draft {
-  background: var(--surface-container-high);
-  color: var(--on-surface-variant);
-}
-.badge-active {
-  background: #dae8ff;
-  color: var(--primary);
-}
-.badge-flagged {
-  background: #ffdad6;
-  color: var(--error);
-}
-.badge-completed {
-  background: #c7f0d0;
-  color: var(--success);
-}
-.badge-pending {
-  background: var(--surface-container-high);
-  color: var(--on-surface-variant);
-}
-.badge-in_progress {
-  background: #dae8ff;
-  color: var(--primary);
-}
-.badge-blocked {
-  background: #ffdad6;
-  color: var(--error);
-}
-.badge-low {
-  background: var(--surface-container-high);
-  color: var(--on-surface-variant);
-}
-.badge-medium {
-  background: #dae8ff;
-  color: var(--primary);
-}
-.badge-high {
-  background: #ffe6c7;
-  color: var(--warning);
-}
-.badge-urgent {
-  background: #ffdad6;
-  color: var(--error);
-}
+.badge-in-progress, .badge-active, .badge-submitted, .badge-sourcing, .badge-monitoring, .badge-awarded, .badge-chartered, .badge-issued, .badge-proposed, .badge-bidding { background: #dae8ff; color: var(--primary); }
+
+/* Tone-driven overrides: a lookup_options row with its own `tone` set (via
+   the "Manage" control on a dropdown, see EntityManager.tsx) picks its color
+   from here instead of the value-text matching above -- same palette, but
+   the user controls it directly instead of needing a badge-<value> rule
+   hand-added here for every new status text. badge-tone-neutral has no rule
+   of its own -- it just falls through to .badge's plain gray default. */
+.badge-tone-success { background: #c7f0d0; color: var(--success); }
+.badge-tone-error { background: #ffdad6; color: var(--error); }
+.badge-tone-warning { background: #ffe6c7; color: var(--warning); }
+.badge-tone-info { background: #dae8ff; color: var(--primary); }
+
+/* Additional value-text badges not covered by the semantic groups above
+   (kept separate rather than merged into those selector lists so each
+   group stays organized by meaning: neutral/pending, danger, warning). */
+.badge-draft, .badge-pending, .badge-low { background: var(--surface-container-high); color: var(--on-surface-variant); }
+.badge-in_progress, .badge-medium { background: #dae8ff; color: var(--primary); }
+.badge-urgent { background: #ffdad6; color: var(--error); }
 
 /* ---- Progress -------------------------------------------------------------- */
 .progress-track {
@@ -347,7 +374,7 @@ html.dark .card {
 }
 
 /* Semantic badges: translucent tint + bright text on dark. */
-html.dark .badge-approved, html.dark .badge-active, html.dark .badge-completed,
+html.dark .badge-approved, html.dark .badge-completed,
 html.dark .badge-received, html.dark .badge-paid, html.dark .badge-resolved,
 html.dark .badge-closed { background: rgba(126, 224, 160, 0.16); color: var(--success); }
 
@@ -361,4 +388,100 @@ html.dark .badge-on-hold { background: rgba(245, 194, 107, 0.16); color: var(--w
 
 html.dark .badge-in-progress, html.dark .badge-submitted, html.dark .badge-sourcing,
 html.dark .badge-monitoring, html.dark .badge-awarded, html.dark .badge-chartered,
-html.dark .badge-issued, html.dark .badge-proposed { background: rgba(173, 198, 255, 0.16); color: var(--primary); }
+html.dark .badge-issued, html.dark .badge-proposed, html.dark .badge-bidding { background: rgba(173, 198, 255, 0.16); color: var(--primary); }
+
+html.dark .badge-tone-success { background: rgba(126, 224, 160, 0.16); color: var(--success); }
+html.dark .badge-tone-error { background: rgba(255, 180, 171, 0.16); color: var(--error); }
+html.dark .badge-tone-warning { background: rgba(245, 194, 107, 0.16); color: var(--warning); }
+html.dark .badge-tone-info { background: rgba(173, 198, 255, 0.16); color: var(--primary); }
+
+html.dark .badge-draft, html.dark .badge-pending, html.dark .badge-low {
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+}
+html.dark .badge-in_progress, html.dark .badge-medium {
+  background: rgba(173, 198, 255, 0.16);
+  color: var(--primary);
+}
+html.dark .badge-urgent {
+  background: rgba(255, 180, 171, 0.16);
+  color: var(--error);
+}
+
+/* =============================================================================
+   App shell layout + responsive / mobile handling
+   ========================================================================== */
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-main {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-lg) var(--space-xl);
+  max-width: 1400px;
+}
+
+.sidebar {
+  width: var(--sidebar-width);
+  flex-shrink: 0;
+  background: var(--surface-container-low);
+  min-height: 100vh;
+  padding: 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: sticky;
+  top: 0;
+}
+
+.sidebar-toggle {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .app-main {
+    padding: var(--space-md) var(--space-md) var(--space-lg);
+    max-width: 100%;
+  }
+
+  .sidebar-toggle {
+    display: inline-flex;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    margin: 0 0 1rem;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 40;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-md);
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop.is-open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    background: rgba(10, 12, 15, 0.45);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-main {
+    padding: var(--space-sm) var(--space-sm) var(--space-lg);
+  }
+}

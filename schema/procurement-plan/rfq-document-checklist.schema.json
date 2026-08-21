@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/rfq-document-checklist.schema.json",
+  "title": "Bid Document Checklist Item",
+  "description": "The template of required bid documents for one Procurement Activity, grouped by section (Administrative/Technical/Legal/Financial). Matches public.rfq_document_checklist. No ownerId column -- writes are gated by owns_procurement_activity(activityId) at the DB level instead of row ownership. Per-bidder Pass/Fail against these items lives in rfq-checklist-result.schema.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "activityId", "section", "documentName"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "activityId": { "description": "FK -> procurement-plan/procurement-activity.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "section": { "type": "string", "minLength": 1, "maxLength": 100, "examples": ["Administrative", "Technical", "Legal", "Financial"] },
+    "documentName": { "type": "string", "minLength": 1, "maxLength": 200, "examples": ["Bid Bond"] },
+    "remarks": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  }
+}

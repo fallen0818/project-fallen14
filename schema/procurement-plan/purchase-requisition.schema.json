@@ -2,55 +2,20 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.com/procurement-plan/purchase-requisition.schema.json",
   "title": "Purchase Requisition",
-  "description": "An internal request to procure one or more procurement items, initiating the sourcing process.",
+  "description": "The approval gate before sourcing starts -- not a scheduling record (migration 0049 trimmed it down to exactly this: who's asking, the decision, and the decision trail). Matches public.purchase_requisitions. Title, Estimated Total, Currency, Requisition Date, and Required-By were all dropped; a Requisition no longer owns a line-item list of Procurement Items -- that link now lives on the item's own `requisitionId` (migration 0046/0047).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["requisitionId", "requestedBy", "department", "requisitionDate", "lineItems", "currency", "status"],
+  "required": ["id", "code", "requestedBy", "department", "statusId", "ownerId"],
   "properties": {
-    "requisitionId": {
-      "type": "string",
-      "pattern": "^PR-[0-9]{6}$",
-      "examples": ["PR-000501"]
-    },
-    "title": { "type": "string" },
-    "requestedBy": { "$ref": "#/$defs/nonEmptyString" },
-    "department": { "$ref": "#/$defs/nonEmptyString" },
-    "requisitionDate": { "$ref": "#/$defs/date" },
-    "requiredByDate": { "$ref": "#/$defs/date" },
-    "lineItems": {
-      "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/requisitionLine" }
-    },
-    "estimatedTotal": { "$ref": "#/$defs/money" },
-    "currency": { "$ref": "#/$defs/currency" },
-    "status": {
-      "type": "string",
-      "enum": ["draft", "submitted", "approved", "rejected", "converted-to-rfq", "closed"]
-    },
-    "approvedBy": { "type": "string" },
-    "createdAt": { "$ref": "#/$defs/timestamp" }
-  },
-  "$defs": {
-    "nonEmptyString": { "type": "string", "minLength": 1 },
-    "money": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "date": { "type": "string", "format": "date" },
-    "timestamp": { "type": "string", "format": "date-time" },
-    "requisitionLine": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["procurementItemId", "quantity"],
-      "properties": {
-        "procurementItemId": {
-          "description": "FK -> procurement-plan/procurement-item.itemId.",
-          "type": "string",
-          "pattern": "^PRC-ITEM-[0-9]{6}$"
-        },
-        "quantity": { "type": "number", "exclusiveMinimum": 0 },
-        "estimatedUnitCost": { "$ref": "#/$defs/money" },
-        "notes": { "type": "string" }
-      }
-    }
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^PR-[0-9]{6}$", "examples": ["PR-000501"] },
+    "requestedBy": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "department": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "statusId": { "description": "FK -> lookup_options.id, list_key = 'requisition_status'.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "approvedBy": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "approvedDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
   }
 }

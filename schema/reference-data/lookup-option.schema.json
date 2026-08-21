@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/reference-data/lookup-option.schema.json",
+  "title": "Lookup Option",
+  "description": "One value in a generic reference-data list (status/category/priority/mode/etc.), keyed by listKey. Matches public.lookup_options. Replaced hardcoded enum columns across nearly every other table (migrations 0008-0011) -- any *_id field elsewhere in this schema set that says 'FK -> lookup_options.id, list_key = X' draws its valid values from the rows here where listKey = X, not from a fixed schema enum. Current listKeys in use: asset_category, asset_request_priority, asset_request_status, bom_status, budget_period, budget_status, contractor_license_category, contractor_specialty, funding_source, milestone_status, post_qualification_result, post_qualification_status, procurement_activity_status, procurement_category, procurement_item_status, procurement_mode, project_status, purchase_order_status, requisition_status, risk_category, risk_impact, risk_probability, risk_severity, risk_status, risk_type. Two listKeys (bidding_activity_status, rfq_status) are orphaned leftovers from the retired Vendor Bidding module (migration 0041 dropped the columns that referenced them but not the lookup_options rows themselves) -- candidates for cleanup, not currently referenced by any FK.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "listKey", "code", "value", "ownerId"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "listKey": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$", "examples": ["procurement_item_status", "risk_severity"] },
+    "code": { "type": "string", "minLength": 1, "maxLength": 50, "examples": ["PIST-0001"] },
+    "value": { "type": "string", "minLength": 1, "maxLength": 200, "examples": ["Identified"] },
+    "tone": { "description": "Badge color hint in the UI.", "type": "string", "enum": ["success", "warning", "error", "info", "neutral"] },
+    "isTerminal": { "description": "Whether reaching this value should be treated as an end state for the parent record.", "type": "boolean", "default": false },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  }
+}

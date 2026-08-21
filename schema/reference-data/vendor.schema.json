@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/reference-data/vendor.schema.json",
+  "title": "Vendor (Supplier)",
+  "description": "A supplier -- shared reference data, not owned by any one module. Labeled 'Supplier' in the app UI. Matches public.vendors. Any authenticated user can create/edit; no delete policy -- is_active replaces hard-delete so history referenced by past bids/POs is never orphaned.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "nameKey": { "description": "Generated column: lower(btrim(name)), for case/whitespace-insensitive uniqueness checks. Not user-writable.", "type": "string" },
+    "contactName": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "contactEmail": { "type": "string", "format": "email" },
+    "contactPhone": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "address": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "taxId": { "type": "string", "maxLength": 50 },
+    "website": { "type": "string", "format": "uri" },
+    "isActive": { "type": "boolean", "default": true },
+    "notes": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "createdBy": { "description": "FK -> reference-data/profile.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  }
+}

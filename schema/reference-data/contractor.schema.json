@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/reference-data/contractor.schema.json",
+  "title": "Contractor",
+  "description": "A contractor -- shared reference data, kept as a separate table from Vendor/Supplier (migration 0016) since contractors carry genuinely different fields (specialty, license, insurance) that suppliers don't. Matches public.contractors. Same RLS shape as Vendor: any authenticated user can create/edit, no delete, is_active replaces hard-delete.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "nameKey": { "description": "Generated column: lower(btrim(name)). Not user-writable.", "type": "string" },
+    "specialtyId": { "description": "FK -> lookup_options.id, list_key = 'contractor_specialty'.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "licenseCategoryId": { "description": "FK -> lookup_options.id, list_key = 'contractor_license_category' -- PCAB classification, AAA (largest) down to Trade.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "licenseNumber": { "type": "string", "maxLength": 100 },
+    "licenseExpiryDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "insuranceExpiry": { "$ref": "../common.schema.json#/$defs/date" },
+    "contactName": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "contactEmail": { "type": "string", "format": "email" },
+    "contactPhone": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "address": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "taxId": { "type": "string", "maxLength": 50 },
+    "website": { "type": "string", "format": "uri" },
+    "isActive": { "type": "boolean", "default": true },
+    "notes": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "createdBy": { "description": "FK -> reference-data/profile.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/procurement-activity.schema.json",
+  "title": "Procurement Activity",
+  "description": "Replaces the retired Vendor Bidding/RFQ module (migration 0041). One flat record per Requisition + Mode of Procurement, with its own event schedule as child lines instead of one-RFQ-with-nested-fields. Matches public.procurement_activities, with public.procurement_activity_lines embedded as the `scheduleLines` array. Bid Evaluation (vendor-bid.schema.json, rfq-document-checklist.schema.json, rfq-checklist-result.schema.json) and Post-Qualification (post-qualification.schema.json) both anchor on a Procurement Activity now, not an RFQ.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "code", "requisitionId", "modeId", "ownerId"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^PRC-ACT-[0-9]{6}$", "examples": ["PRC-ACT-000001"] },
+    "requisitionId": { "description": "FK -> procurement-plan/purchase-requisition.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "modeId": {
+      "description": "FK -> lookup_options.id, list_key = 'procurement_mode'. The formal method this activity executes under -- should match the Mode already decided on the Procurement Items batched into requisitionId. Branching on this value (e.g. Public Bidding implying a formal bid opening) is not wired up in the app -- the field records the decision, it doesn't drive workflow yet.",
+      "$ref": "../common.schema.json#/$defs/lookupRef"
+    },
+    "notes": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "scheduleLines": {
+      "description": "public.procurement_activity_lines rows -- one per schedule step (Pre-bid Conference, Opening of Bids, Award, ...).",
+      "type": "array",
+      "items": { "$ref": "#/$defs/scheduleLine" }
+    },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  },
+  "$defs": {
+    "scheduleLine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "procurementActivityId", "activity", "activityDate", "statusId"],
+      "properties": {
+        "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "procurementActivityId": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "activity": { "type": "string", "minLength": 1, "maxLength": 200, "examples": ["Pre-bid Conference", "Opening of Bids"] },
+        "activityDate": { "$ref": "../common.schema.json#/$defs/date" },
+        "statusId": { "description": "FK -> lookup_options.id, list_key = 'procurement_activity_status'.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+        "remarks": { "$ref": "../common.schema.json#/$defs/optionalText" }
+      }
+    }
+  }
+}

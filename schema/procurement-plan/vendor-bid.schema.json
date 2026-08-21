@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/vendor-bid.schema.json",
+  "title": "Vendor Bid",
+  "description": "One bidder's bid within a Procurement Activity's Bid Evaluation matrix. Matches public.vendor_bids -- repointed from the retired vendor_biddings table to procurement_activities directly (migration 0041, column renamed bidding_id -> activityId). Bidder identity is a Supplier (vendor) or a Contractor, never both -- enforced by a DB check constraint, mirrored here.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "activityId", "totalPrice", "currency"],
+  "not": { "required": ["vendorId", "contractorId"] },
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "activityId": { "description": "FK -> procurement-plan/procurement-activity.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "vendorId": { "description": "FK -> reference-data/vendor.id. Mutually exclusive with contractorId.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "contractorId": { "description": "FK -> reference-data/contractor.id. Mutually exclusive with vendorId.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "submittedAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "totalPrice": { "description": "Bid Offer.", "$ref": "../common.schema.json#/$defs/money" },
+    "currency": { "$ref": "../common.schema.json#/$defs/currency" },
+    "bidSecurityAmount": { "$ref": "../common.schema.json#/$defs/money" },
+    "leadTimeDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
+    "warrantyValue": { "type": "number", "minimum": 0 },
+    "warrantyUnit": { "type": "string", "enum": ["years", "months"] },
+    "deliveryValue": { "type": "number", "minimum": 0 },
+    "deliveryUnit": { "type": "string", "enum": ["days", "months"] },
+    "evaluationScore": { "type": "number", "minimum": 0, "maximum": 100 },
+    "compliant": { "type": "boolean" },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  }
+}

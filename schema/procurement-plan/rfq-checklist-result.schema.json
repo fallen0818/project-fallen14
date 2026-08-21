@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/rfq-checklist-result.schema.json",
+  "title": "Bid Document Checklist Result",
+  "description": "One (document requirement, bidder) Pass/Fail cell in the Bid Evaluation matrix. Matches public.rfq_checklist_results. A missing row means 'not yet checked' -- only ticked boxes get written, so most cells never need a row at all.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "checklistItemId", "vendorBidId"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "checklistItemId": { "description": "FK -> procurement-plan/rfq-document-checklist.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "vendorBidId": { "description": "FK -> procurement-plan/vendor-bid.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "passed": { "type": "boolean", "default": false },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  }
+}

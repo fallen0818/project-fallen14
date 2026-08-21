@@ -8,28 +8,29 @@
   "required": ["rfqId", "requisitionId", "issueDate", "closeDate", "status", "bids"],
   "properties": {
     "rfqId": {
-      "type": "string",
-      "pattern": "^RFQ-[0-9]{6}$",
+      "$ref": "common.schema.json#/$defs/rfqId",
       "examples": ["RFQ-000777"]
     },
     "requisitionId": {
       "description": "FK -> procurement-plan/purchase-requisition.requisitionId.",
-      "type": "string",
-      "pattern": "^PR-[0-9]{6}$"
+      "$ref": "common.schema.json#/$defs/requisitionId"
     },
-    "title": { "type": "string" },
-    "issueDate": { "$ref": "#/$defs/date" },
-    "closeDate": { "$ref": "#/$defs/date" },
-    "currency": { "$ref": "#/$defs/currency" },
+    "title": { "type": "string", "maxLength": 200 },
+    "issueDate": { "$ref": "common.schema.json#/$defs/date" },
+    "closeDate": {
+      "description": "Should be on or after issueDate; not enforced at schema level - validate in application logic.",
+      "$ref": "common.schema.json#/$defs/date"
+    },
+    "currency": { "$ref": "common.schema.json#/$defs/currency" },
     "evaluationCriteria": {
-      "description": "Weighted criteria used to score bids. Weights should sum to 1.",
+      "description": "Weighted criteria used to score bids. Weights should sum to 1; not enforced at schema level - validate in application logic.",
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["name", "weight"],
         "properties": {
-          "name": { "type": "string", "minLength": 1 },
+          "name": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
           "weight": { "type": "number", "minimum": 0, "maximum": 1 }
         }
       }
@@ -40,30 +41,37 @@
     },
     "bids": {
       "type": "array",
+      "minItems": 1,
       "items": { "$ref": "#/$defs/bid" }
     },
     "awardedVendorId": {
-      "description": "Vendor selected for award; should match a bids[].vendorId.",
-      "type": "string"
+      "description": "Vendor selected for award; required once status is 'awarded'. Should match a bids[].vendorId - not enforced at schema level, validate in application logic.",
+      "type": "string",
+      "maxLength": 100
     },
-    "createdAt": { "$ref": "#/$defs/timestamp" }
+    "createdAt": { "$ref": "common.schema.json#/$defs/timestamp" }
   },
+  "allOf": [
+    {
+      "if": {
+        "required": ["status"],
+        "properties": { "status": { "const": "awarded" } }
+      },
+      "then": { "required": ["awardedVendorId"] }
+    }
+  ],
   "$defs": {
-    "money": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "date": { "type": "string", "format": "date" },
-    "timestamp": { "type": "string", "format": "date-time" },
     "bid": {
       "type": "object",
       "additionalProperties": false,
       "required": ["vendorId", "vendorName", "totalPrice", "currency"],
       "properties": {
-        "vendorId": { "type": "string", "minLength": 1 },
-        "vendorName": { "type": "string", "minLength": 1 },
-        "submittedAt": { "type": "string", "format": "date-time" },
-        "totalPrice": { "$ref": "#/$defs/money" },
-        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-        "leadTimeDays": { "type": "integer", "minimum": 0 },
+        "vendorId": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "vendorName": { "$ref": "common.schema.json#/$defs/nonEmptyString" },
+        "submittedAt": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "totalPrice": { "$ref": "common.schema.json#/$defs/money" },
+        "currency": { "$ref": "common.schema.json#/$defs/currency" },
+        "leadTimeDays": { "type": "integer", "minimum": 0, "maximum": 3650 },
         "lineQuotes": {
           "type": "array",
           "items": {
@@ -73,10 +81,9 @@
             "properties": {
               "procurementItemId": {
                 "description": "FK -> procurement-plan/procurement-item.itemId.",
-                "type": "string",
-                "pattern": "^PRC-ITEM-[0-9]{6}$"
+                "$ref": "common.schema.json#/$defs/procurementItemId"
               },
-              "unitPrice": { "$ref": "#/$defs/money" }
+              "unitPrice": { "$ref": "common.schema.json#/$defs/money" }
             }
           }
         },

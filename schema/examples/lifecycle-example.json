@@ -1,173 +1,270 @@
 {
-  "_note": "A single linked instance flowing Capex -> Procurement -> Project Monitoring. Each object validates against the schema named by its key.",
-  "capex-budget": {
-    "budgetId": "CBUD-2026-0001",
-    "fiscalYear": 2026,
-    "period": "FY",
-    "department": "IT",
-    "category": "it-infrastructure",
-    "allocatedAmount": 500000,
-    "committedAmount": 120000,
-    "spentAmount": 0,
-    "currency": "USD",
-    "status": "approved",
-    "ownerId": "user-cfo-01",
-    "createdAt": "2026-01-05T09:00:00Z"
+  "profile": {
+    "id": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "email": "pm@example.com",
+    "fullName": "Sample PM",
+    "role": "editor"
   },
-  "asset-request": {
-    "requestId": "CAPEX-000042",
-    "budgetId": "CBUD-2026-0001",
-    "title": "Core network switch refresh",
-    "description": "Replace end-of-life datacenter switches.",
-    "assetCategory": "it-infrastructure",
-    "estimatedCost": 120000,
-    "currency": "USD",
-    "justification": "Current hardware out of vendor support in Q3.",
-    "priority": "high",
-    "requestedBy": "user-neteng-07",
-    "requestDate": "2026-01-12",
-    "requiredByDate": "2026-06-30",
-    "status": "approved",
-    "approvals": [
-      { "level": 2, "approverId": "user-itdir-02", "approverTitle": "IT Director", "decision": "approved", "decidedAt": "2026-01-15T14:20:00Z" }
-    ]
+  "lookup-option": {
+    "id": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "listKey": "procurement_item_status",
+    "code": "PIST-0002",
+    "value": "Requisitioned",
+    "tone": "info",
+    "isTerminal": false,
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2"
+  },
+  "vendor": {
+    "id": "429daa85-90fa-449c-a093-dafb98ba0d7a",
+    "name": "NetSupply Co",
+    "contactEmail": "sales@netsupply.example",
+    "isActive": true,
+    "createdBy": "a867e664-c46d-4f38-ae8f-28b38ab073f2"
+  },
+  "contractor": {
+    "id": "b85c6829-4464-47b6-a582-a187bc2aa675",
+    "name": "BuildRight Corp",
+    "licenseNumber": "PCAB-AAA-00123",
+    "isActive": true,
+    "createdBy": "a867e664-c46d-4f38-ae8f-28b38ab073f2"
+  },
+  "capex-budget": {
+    "id": "01bfa086-28b5-4a26-91ed-e7385e30f589",
+    "code": "CBUD-2026-0001",
+    "fiscalYear": 2026,
+    "periodId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "department": "IT",
+    "allocatedAmount": 5000000,
+    "committedAmount": 0,
+    "spentAmount": 0,
+    "currency": "PHP",
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2"
   },
   "approval-matrix": {
-    "matrixId": "APPX-0001",
-    "name": "FY2026 Capex Authorization",
-    "currency": "USD",
+    "id": "ff7fed20-ea84-4399-bf79-c95b09de746f",
+    "code": "APPX-0001",
+    "name": "Standard Capex Approval",
+    "currency": "PHP",
     "effectiveFrom": "2026-01-01",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
     "levels": [
-      { "level": 1, "approverRole": "manager", "approverTitle": "Line Manager", "minAmount": 0, "maxAmount": 25000 },
-      { "level": 2, "approverRole": "director", "approverTitle": "IT Director", "minAmount": 25000.01, "maxAmount": 250000, "escalationRole": "cfo" },
-      { "level": 3, "approverRole": "cfo", "approverTitle": "Chief Financial Officer", "minAmount": 250000.01, "requiresQuorum": 1 }
+      {
+        "id": "1e044d9e-ebba-4e85-8eb7-fea4f0349a69",
+        "matrixId": "ff7fed20-ea84-4399-bf79-c95b09de746f",
+        "level": 1,
+        "approverRole": "Department Head",
+        "minAmount": 0,
+        "maxAmount": 500000,
+        "requiresQuorum": 1
+      }
+    ]
+  },
+  "asset-request": {
+    "id": "672db2bb-2e13-4438-9e9b-427e4143b408",
+    "code": "CAPEX-000042",
+    "budgetId": "01bfa086-28b5-4a26-91ed-e7385e30f589",
+    "title": "Network switch upgrade",
+    "estimatedCost": 96000,
+    "currency": "PHP",
+    "requestedBy": "user-neteng-07",
+    "requestDate": "2026-02-01",
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "approvals": []
+  },
+  "bill-of-materials": {
+    "id": "d239cf36-616f-47db-92ee-46aa4b355d5d",
+    "code": "BOM-000001",
+    "assetRequestId": "672db2bb-2e13-4438-9e9b-427e4143b408",
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "estimatedTotalCost": 96000,
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "lines": [
+      {
+        "id": "dc84a796-737a-4149-be09-458775903c5e",
+        "bomId": "d239cf36-616f-47db-92ee-46aa4b355d5d",
+        "partName": "48-port managed L3 switch",
+        "categoryId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+        "quantity": 8,
+        "unitOfMeasure": "each",
+        "estimatedUnitCost": 12000,
+        "estimatedTotalCost": 96000,
+        "procurementItemId": "4d285d6a-8893-4bff-8493-2f4295648117"
+      }
     ]
   },
   "procurement-item": {
-    "itemId": "PRC-ITEM-000101",
-    "capexRequestId": "CAPEX-000042",
-    "description": "48-port managed L3 switch",
-    "category": "goods",
-    "quantity": 8,
-    "unitOfMeasure": "each",
-    "estimatedUnitCost": 12000,
-    "currency": "USD",
+    "id": "4d285d6a-8893-4bff-8493-2f4295648117",
+    "code": "PRC-ITEM-000101",
+    "capexRequestId": "672db2bb-2e13-4438-9e9b-427e4143b408",
+    "modeId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
     "estimatedTotalCost": 96000,
-    "specifications": { "ports": 48, "layer": 3, "poe": true },
-    "status": "requisitioned"
+    "requisitionId": "43c2026f-de83-4327-9d94-bdb22c665783",
+    "unitOfMeasure": "each",
+    "currency": "PHP",
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2"
   },
   "purchase-requisition": {
-    "requisitionId": "PR-000501",
-    "title": "Network switch procurement",
+    "id": "43c2026f-de83-4327-9d94-bdb22c665783",
+    "code": "PR-000501",
     "requestedBy": "user-neteng-07",
     "department": "IT",
-    "requisitionDate": "2026-02-01",
-    "requiredByDate": "2026-05-15",
-    "lineItems": [
-      { "procurementItemId": "PRC-ITEM-000101", "quantity": 8, "estimatedUnitCost": 12000 }
-    ],
-    "estimatedTotal": 96000,
-    "currency": "USD",
-    "status": "converted-to-rfq"
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2"
   },
-  "vendor-bidding": {
-    "rfqId": "RFQ-000777",
-    "requisitionId": "PR-000501",
-    "title": "RFQ - L3 switches",
-    "issueDate": "2026-02-05",
-    "closeDate": "2026-02-20",
-    "currency": "USD",
-    "evaluationCriteria": [
-      { "name": "price", "weight": 0.6 },
-      { "name": "lead-time", "weight": 0.2 },
-      { "name": "warranty", "weight": 0.2 }
-    ],
-    "status": "awarded",
-    "bids": [
-      { "vendorId": "V-1001", "vendorName": "NetSupply Co", "totalPrice": 92000, "currency": "USD", "leadTimeDays": 30, "evaluationScore": 88.5, "compliant": true,
-        "lineQuotes": [ { "procurementItemId": "PRC-ITEM-000101", "unitPrice": 11500 } ] },
-      { "vendorId": "V-1002", "vendorName": "CoreGear Ltd", "totalPrice": 98000, "currency": "USD", "leadTimeDays": 21, "evaluationScore": 81.0, "compliant": true }
-    ],
-    "awardedVendorId": "V-1001"
+  "procurement-activity": {
+    "id": "f31c5989-2b7a-4352-864c-560b16041310",
+    "code": "PRC-ACT-000001",
+    "requisitionId": "43c2026f-de83-4327-9d94-bdb22c665783",
+    "modeId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "scheduleLines": [
+      {
+        "id": "627b0fc3-7009-410d-942e-55aa3cca0fa0",
+        "procurementActivityId": "f31c5989-2b7a-4352-864c-560b16041310",
+        "activity": "Opening of Bids",
+        "activityDate": "2026-02-20",
+        "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9"
+      }
+    ]
+  },
+  "vendor-bid": {
+    "id": "aee31514-23c7-4da5-bbdd-ee2c2818f228",
+    "activityId": "f31c5989-2b7a-4352-864c-560b16041310",
+    "vendorId": "429daa85-90fa-449c-a093-dafb98ba0d7a",
+    "totalPrice": 92000,
+    "currency": "PHP",
+    "bidSecurityAmount": 4600,
+    "leadTimeDays": 30,
+    "evaluationScore": 88.5,
+    "compliant": true
+  },
+  "rfq-document-checklist": {
+    "id": "5dc12e66-11ac-41a8-a2b6-c7cc5f656b61",
+    "activityId": "f31c5989-2b7a-4352-864c-560b16041310",
+    "section": "Administrative",
+    "documentName": "Bid Bond"
+  },
+  "rfq-checklist-result": {
+    "id": "bd6b7ee9-e825-40cb-83c1-b0a5612564ff",
+    "checklistItemId": "5dc12e66-11ac-41a8-a2b6-c7cc5f656b61",
+    "vendorBidId": "aee31514-23c7-4da5-bbdd-ee2c2818f228",
+    "passed": true
+  },
+  "post-qualification": {
+    "id": "7bc5478b-ee2d-4257-969d-1a25dc333c52",
+    "code": "PRC-PQ-000001",
+    "activityId": "f31c5989-2b7a-4352-864c-560b16041310",
+    "winningVendorId": "429daa85-90fa-449c-a093-dafb98ba0d7a",
+    "nfccAmount": 500000,
+    "decisionId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "decidedBy": "BAC Chairperson",
+    "decisionDate": "2026-02-22",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "checklist": [
+      {
+        "id": "a14b926e-4d90-4403-9820-ee52d3a5f906",
+        "postQualificationId": "7bc5478b-ee2d-4257-969d-1a25dc333c52",
+        "section": "Legal",
+        "documentName": "Updated PhilGEPS Registration",
+        "passed": true
+      }
+    ]
   },
   "purchase-order": {
-    "poId": "PO-000900",
-    "rfqId": "RFQ-000777",
-    "requisitionId": "PR-000501",
-    "vendorId": "V-1001",
-    "vendorName": "NetSupply Co",
+    "id": "4639b428-dada-438a-a128-2db598a7fe34",
+    "code": "PO-000900",
+    "requisitionId": "43c2026f-de83-4327-9d94-bdb22c665783",
+    "vendorId": "429daa85-90fa-449c-a093-dafb98ba0d7a",
     "orderDate": "2026-02-25",
     "expectedDeliveryDate": "2026-03-27",
-    "lineItems": [
-      { "procurementItemId": "PRC-ITEM-000101", "description": "48-port managed L3 switch", "quantity": 8, "unitPrice": 11500, "lineTotal": 92000, "receivedQuantity": 0 }
-    ],
     "subtotal": 92000,
     "taxAmount": 11040,
     "shippingAmount": 500,
     "total": 103540,
-    "currency": "USD",
+    "currency": "PHP",
     "paymentTerms": "net-30",
     "deliveryTerms": "DDP",
-    "status": "issued"
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "lines": [
+      {
+        "id": "e693f2b6-701b-461e-8ca1-006c5ab91c55",
+        "poId": "4639b428-dada-438a-a128-2db598a7fe34",
+        "procurementItemId": "4d285d6a-8893-4bff-8493-2f4295648117",
+        "quantity": 8,
+        "unitPrice": 11500,
+        "lineTotal": 92000,
+        "receivedQuantity": 0
+      }
+    ]
   },
   "project-charter": {
-    "projectId": "PRJ-000010",
-    "charterVersion": 1,
-    "title": "Datacenter Network Modernization",
-    "sponsor": "user-cio-01",
-    "projectManager": "user-pm-03",
-    "objectives": ["Eliminate unsupported hardware", "Improve east-west throughput"],
-    "scope": { "inScope": ["Core switching"], "outOfScope": ["Edge wifi"] },
+    "id": "c79e4676-6698-4010-be03-237966921ab1",
+    "code": "PRJ-000010",
+    "title": "Branch Network Refresh",
+    "sponsor": "CIO Office",
+    "projectManager": "Sample PM",
     "startDate": "2026-03-01",
-    "plannedEndDate": "2026-07-31",
-    "baselineBudget": 120000,
-    "currency": "USD",
-    "fundingCapexRequestIds": ["CAPEX-000042"],
-    "status": "active"
-  },
-  "milestone-tracker": {
-    "milestoneId": "MS-000031",
-    "projectId": "PRJ-000010",
-    "name": "Hardware delivered & staged",
-    "weight": 0.3,
-    "deliverables": [
-      { "name": "Switches received", "status": "pending", "dueDate": "2026-03-27" }
+    "plannedEndDate": "2026-06-30",
+    "baselineBudget": 96000,
+    "currency": "PHP",
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "overallProgressPercent": 33.33,
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "objectives": [
+      {
+        "id": "3a4a5ba9-6943-41e3-b66c-7e82266efe47",
+        "charterId": "c79e4676-6698-4010-be03-237966921ab1",
+        "objective": "Replace end-of-life switches at Branch 12",
+        "sortOrder": 0
+      }
     ],
+    "fundingProcurementItemIds": ["4d285d6a-8893-4bff-8493-2f4295648117"]
+  },
+  "milestone": {
+    "id": "b6c57a7e-96e3-4a5f-b5cb-3c6b7568f267",
+    "code": "MS-000031",
+    "projectId": "c79e4676-6698-4010-be03-237966921ab1",
+    "name": "Hardware delivered",
     "plannedStart": "2026-03-01",
-    "plannedEnd": "2026-03-30",
-    "physicalProgressPercent": 40,
-    "status": "in-progress"
+    "plannedEnd": "2026-03-31",
+    "physicalProgressPercent": 100,
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "deliverables": [
+      {
+        "id": "f5b6bf1f-41c7-4207-a6fc-0ce449ddcf28",
+        "milestoneId": "b6c57a7e-96e3-4a5f-b5cb-3c6b7568f267",
+        "name": "8x L3 switches on-site",
+        "status": "accepted"
+      }
+    ],
+    "dependsOnMilestoneIds": []
   },
   "financial-tracking": {
-    "trackingId": "FT-000205",
-    "projectId": "PRJ-000010",
+    "id": "16fdb11b-7453-4315-bcde-d449dc988f5a",
+    "code": "FT-000205",
+    "projectId": "c79e4676-6698-4010-be03-237966921ab1",
     "period": "2026-03",
-    "currency": "USD",
-    "plannedCost": 120000,
+    "currency": "PHP",
+    "plannedCost": 96000,
     "committedCost": 103540,
     "actualCost": 0,
-    "earnedValue": 48000,
-    "forecastAtCompletion": 121000,
-    "costVariance": 48000,
-    "linkedPurchaseOrderIds": ["PO-000900"],
-    "recordedBy": "user-pm-03",
-    "recordedAt": "2026-03-31T17:00:00Z"
+    "earnedValue": 0,
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2",
+    "linkedPurchaseOrderIds": ["4639b428-dada-438a-a128-2db598a7fe34"]
   },
   "risk-issue-log": {
-    "entryId": "RISK-000012",
-    "projectId": "PRJ-000010",
-    "type": "risk",
-    "title": "Vendor lead time may slip",
-    "description": "Global chip shortage could delay switch delivery.",
-    "category": "procurement",
-    "probability": "possible",
-    "impact": "major",
-    "severity": "high",
-    "status": "monitoring",
-    "owner": "user-pm-03",
-    "mitigationPlan": "Secure alternate vendor V-1002 as backup.",
-    "linkedMilestoneId": "MS-000031",
-    "raisedDate": "2026-02-10",
-    "dueDate": "2026-03-20"
+    "id": "bd823936-e90d-4fd8-8843-9c27db73210d",
+    "code": "RISK-000012",
+    "projectId": "c79e4676-6698-4010-be03-237966921ab1",
+    "typeId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "title": "Delivery may slip past quarter-end",
+    "statusId": "585f3a7d-3b59-4467-8a34-7be37ac7a8a9",
+    "raisedDate": "2026-02-26",
+    "ownerId": "a867e664-c46d-4f38-ae8f-28b38ab073f2"
   }
 }

@@ -69,6 +69,44 @@ export async function createLookupOption(
   return data as Row;
 }
 
+/**
+ * Rename a lookup_options row and/or change its badge tone (see the "Manage"
+ * control next to any lookup_options-backed dropdown, isLookupField in
+ * EntityManager.tsx). `tone` must be one of success/warning/error/info/
+ * neutral, or null to fall back to the plain gray badge -- enforced by
+ * lookup_options_tone_check (migration 0011).
+ */
+export async function updateLookupOption(
+  supabase: SupabaseClient,
+  id: string,
+  values: { value?: string; tone?: string | null },
+): Promise<Row> {
+  const { data, error } = await supabase
+    .from("lookup_options")
+    .update(values)
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data as Row;
+}
+
+/**
+ * Delete a lookup_options row (see the "Manage" control). Every *_id column
+ * that references lookup_options does so with `on delete restrict` (or plain
+ * `references`, which defaults to the same), so deleting a value still in
+ * use on an existing record fails with a foreign-key violation instead of
+ * silently orphaning those rows -- the caller should surface that error
+ * rather than assume success.
+ */
+export async function deleteLookupOption(
+  supabase: SupabaseClient,
+  id: string,
+): Promise<void> {
+  const { error } = await supabase.from("lookup_options").delete().eq("id", id);
+  if (error) throw error;
+}
+
 /** Create a row, auto-generating its code and stamping owner_id. */
 export async function createRow(
   supabase: SupabaseClient,

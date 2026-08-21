@@ -60,14 +60,14 @@ export interface FieldDef {
 /**
  * Optional child-table "line items" editable inline in this entity's create/
  * edit modal — a freeform, dynamically-added-and-removed list of rows in a
- * separate table pointing back at this entity (e.g. a procurement item's
- * bidding schedule: Pre-bid Conference, Opening of Bids, Post-qualification,
- * Award — a different set of activities on every item, not a fixed column
- * per activity). Distinct from a "reference" field, which points *at* one
- * other row; this points *from* many rows back at one parent.
+ * separate table pointing back at this entity (e.g. a Bill of Materials'
+ * parts list: each row its own Part, Category, Quantity, and Unit Cost — a
+ * different set of parts on every BOM, not a fixed column per part).
+ * Distinct from a "reference" field, which points *at* one other row; this
+ * points *from* many rows back at one parent.
  */
 export interface LineItemsConfig {
-  /** Child table, e.g. "bidding_schedule_activities". */
+  /** Child table, e.g. "bill_of_materials_lines". */
   table: string;
   /** FK column on the child table pointing back at this entity's id. */
   parentColumn: string;
@@ -89,17 +89,18 @@ export interface LineItemsConfig {
    * `compute`) whose value, summed across every line, is shown as a total
    * beneath the list — e.g. a BOM's per-line Extended Cost rolled up into an
    * overall estimated total. Omit for line items with nothing worth totaling
-   * (e.g. a bidding schedule's activities).
+   * (e.g. a requisition's per-line notes).
    */
   totalField?: string;
   /** Label for the totalField sum (default: "Total"). */
   totalLabel?: string;
   /**
    * Optional: lines to pre-populate when creating a brand-new parent row
-   * (e.g. a fresh RFQ starts with the usual bid document checklist already
-   * listed, instead of empty). Ignored when editing an existing row — those
-   * load their real saved lines instead. Pre-populated lines have no `id`
-   * yet, so they save as fresh inserts exactly like a manually-added line.
+   * (e.g. a fresh entity starting with a standard set of lines already
+   * listed, instead of empty). Ignored when editing an existing row —
+   * those load their real saved lines instead. Pre-populated lines have no
+   * `id` yet, so they save as fresh inserts exactly like a manually-added
+   * line.
    */
   defaultLines?: () => Record<string, unknown>[];
   /**
@@ -128,6 +129,18 @@ export interface LineItemsConfig {
       parent: Record<string, unknown>,
       supabase: SupabaseClient,
     ) => Record<string, unknown> | Promise<Record<string, unknown>>;
+    /**
+     * When true, every pending line converts into ONE shared target row
+     * instead of one row each — e.g. a Bill of Materials' parts list all
+     * belongs to the same Asset Request, and procurement_items is one row
+     * per Asset Request (migration 0038), so "Generate" should never create
+     * more than one Procurement Item per BOM no matter how many parts are
+     * listed. If any line already has `linkColumn` set, that existing target
+     * is reused (and `mapLine` isn't called again); otherwise exactly one
+     * target row is created — using the first pending line to build its
+     * values — and every pending line is linked to it.
+     */
+    singleTargetPerParent?: boolean;
   };
 }
 
@@ -160,4 +173,54 @@ export interface EntityConfig {
    * skips stamping owner_id entirely when this is true.
    */
   noOwner?: boolean;
+  /**
+   * Name of a `reference` field (pointing at `lookup_options`, e.g.
+   * "status_id") whose value can be "terminal" (see lookup_options.is_terminal
+   * — a Received/Cancelled-style final state). Once a row's value for this
+   * field points at a terminal option, EntityManager treats the row as
+   * permanently locked: Edit/Delete become View-only in the list, and the
+   * edit modal opens read-only. The real enforcement is a matching database
+   * trigger (belt-and-suspenders, same convention as `canEdit`/RLS above) —
+   * this only keeps the UI from offering an action the database will reject.
+   */
+  lockWhenTerminal?: string;
+  /**
+   * Overrides the edit/create modal's width (CSS length, e.g. "1200px").
+   * Omit to use the default: 560px, or -- for an entity with `lineItems` --
+   * a width computed from the line-item column count (see EntityManager's
+   * modal `width` prop). Set this when that computed width still feels
+   * cramped for how much content the fields (top-level or per-line) actually
+   * carry, e.g. long free-text columns.
+   */
+  modalWidth?: string;
+  /**
+   * Read-only "what points at this record" list, shown in the edit modal
+   * for an existing row. For a many-to-one relationship stored as a
+   * `reference` field on the *other* entity (e.g. Procurement Item's own
+   * "Requisition" field, migration 0047) there's otherwise no way to see,
+   * from the "one" side, which rows on the "many" side currently point back
+   * at it — unlike `lineItems`, which owns a dedicated child table edited
+   * inline, this is a plain reverse lookup: fetch `table` where `column`
+   * equals this row's id, and just list them (view-only, click through to
+   * that module to actually edit one).
+   */
+  reverseLookup?: {
+    /** Table to query, e.g. "procurement_items". */
+    table: string;
+    /** Column on that table holding this row's id, e.g. "requisition_id". */
+    column: string;
+    /** Section heading shown above the list in the modal. */
+    label: string;
+    /** Key of the target entity in ENTITIES_BY_KEY, e.g. "items" — used to build a link to that module's list. */
+    entityKey: string;
+    /** Builds each listed row's label from its own columns (plain select "*", no joins — same constraint as refLabel). */
+    refLabel: (row: Record<string, unknown>) => string;
+    /**
+     * Lets an editor pick an unlinked row (`column` is null) from a dropdown
+     * and link it here — sets `column` = this row's id — plus unlink any
+     * already-listed row back to null. Off by default (view-only) since not
+     * every reverse lookup should be editable from this side.
+     */
+    editable?: boolean;
+  };
 }

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/procurement-plan/common.schema.json",
+  "title": "Procurement Plan - Common Definitions",
+  "description": "Shared $defs reused across the procurement-plan schemas so ID patterns, money, currency, date/timestamp and bounded-text rules don't drift between files.",
+  "$defs": {
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "longText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "optionalText": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "money": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "currency": {
+      "description": "ISO 4217 currency code, restricted to the set this system actually handles.",
+      "type": "string",
+      "enum": [
+        "USD", "EUR", "GBP", "JPY", "PHP", "AUD", "CAD", "CHF", "CNY", "SGD",
+        "HKD", "INR", "NZD", "SEK", "NOK", "DKK", "KRW", "MXN", "BRL", "ZAR",
+        "AED", "SAR", "THB", "MYR", "IDR", "VND"
+      ]
+    },
+    "date": { "type": "string", "format": "date" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "capexRequestId": { "type": "string", "pattern": "^CAPEX-[0-9]{6}$" },
+    "procurementItemId": { "type": "string", "pattern": "^PRC-ITEM-[0-9]{6}$" },
+    "requisitionId": { "type": "string", "pattern": "^PR-[0-9]{6}$" },
+    "rfqId": { "type": "string", "pattern": "^RFQ-[0-9]{6}$" },
+    "poId": { "type": "string", "pattern": "^PO-[0-9]{6}$" }
+  }
+}

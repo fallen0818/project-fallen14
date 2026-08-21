@@ -2,63 +2,31 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.com/project-monitoring/financial-tracking.schema.json",
   "title": "Financial Tracking",
-  "description": "Period cost record for a project: planned vs. committed vs. actual, with earned-value fields and links to the purchase orders driving committed spend.",
+  "description": "Planned vs. committed vs. actual cost for one period of one project. Matches public.financial_tracking, with the public.financial_tracking_pos join table (trackingId, purchaseOrderId composite PK, no other columns) surfaced as `linkedPurchaseOrderIds`.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["trackingId", "projectId", "period", "currency", "plannedCost", "committedCost", "actualCost"],
+  "required": ["id", "code", "projectId", "period", "currency", "plannedCost", "committedCost", "actualCost", "ownerId"],
   "properties": {
-    "trackingId": {
-      "type": "string",
-      "pattern": "^FT-[0-9]{6}$",
-      "examples": ["FT-000205"]
-    },
-    "projectId": {
-      "description": "FK -> project-monitoring/project-charter.projectId.",
-      "type": "string",
-      "pattern": "^PRJ-[0-9]{6}$"
-    },
-    "period": {
-      "description": "Reporting period in YYYY-MM (monthly) or YYYY-Qn (quarterly) form.",
-      "type": "string",
-      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2]|Q[1-4])$",
-      "examples": ["2026-03", "2026-Q1"]
-    },
-    "currency": { "$ref": "#/$defs/currency" },
-    "plannedCost": {
-      "description": "Budgeted cost of work scheduled for the period (PV).",
-      "$ref": "#/$defs/money"
-    },
-    "committedCost": {
-      "description": "Cost obligated via issued purchase orders, not yet paid.",
-      "$ref": "#/$defs/money"
-    },
-    "actualCost": {
-      "description": "Cost actually incurred in the period (AC).",
-      "$ref": "#/$defs/money"
-    },
-    "earnedValue": {
-      "description": "Budgeted cost of work performed (EV).",
-      "$ref": "#/$defs/money"
-    },
-    "forecastAtCompletion": {
-      "description": "Estimate at completion (EAC) for the project.",
-      "$ref": "#/$defs/money"
-    },
-    "costVariance": {
-      "description": "EV - AC. May be negative (over budget).",
-      "type": "number"
-    },
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^FT-[0-9]{6}$", "examples": ["FT-000205"] },
+    "projectId": { "description": "FK -> project-monitoring/project-charter.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "period": { "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2]|Q[1-4])$", "examples": ["2026-03", "2026-Q1"] },
+    "currency": { "$ref": "../common.schema.json#/$defs/currency" },
+    "plannedCost": { "$ref": "../common.schema.json#/$defs/money" },
+    "committedCost": { "$ref": "../common.schema.json#/$defs/money" },
+    "actualCost": { "$ref": "../common.schema.json#/$defs/money" },
+    "earnedValue": { "$ref": "../common.schema.json#/$defs/money" },
+    "forecastAtCompletion": { "$ref": "../common.schema.json#/$defs/money" },
+    "costVariance": { "description": "earnedValue - actualCost. Read-only in the app.", "type": "number" },
+    "recordedBy": { "$ref": "../common.schema.json#/$defs/optionalText" },
+    "recordedAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
     "linkedPurchaseOrderIds": {
-      "description": "POs contributing to committed/actual cost. FK -> procurement-plan/purchase-order.poId.",
+      "description": "Backed by the public.financial_tracking_pos join table.",
       "type": "array",
-      "items": { "type": "string", "pattern": "^PO-[0-9]{6}$" }
+      "items": { "$ref": "../common.schema.json#/$defs/uuid" }
     },
-    "recordedBy": { "type": "string" },
-    "recordedAt": { "$ref": "#/$defs/timestamp" }
-  },
-  "$defs": {
-    "money": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "timestamp": { "type": "string", "format": "date-time" }
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
   }
 }

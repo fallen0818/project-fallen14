@@ -2,78 +2,51 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.com/capex-plan/asset-request.schema.json",
   "title": "Asset Request",
-  "description": "An individual capital-expenditure request for a specific asset, drawn against a capex budget.",
+  "description": "An individual capital-expenditure request against a Capex Budget. Matches public.asset_requests, with public.asset_request_approvals embedded as the `approvals` array. No `category` field -- dropped in migration 0023 as a duplicate of the linked Budget's own `categoryId` (asset_category).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["requestId", "budgetId", "title", "assetCategory", "estimatedCost", "currency", "requestedBy", "requestDate", "status"],
+  "required": ["id", "code", "budgetId", "title", "estimatedCost", "currency", "requestedBy", "requestDate", "statusId", "ownerId"],
   "properties": {
-    "requestId": {
-      "description": "Unique asset-request identifier. Referenced by procurement items.",
-      "type": "string",
-      "pattern": "^CAPEX-[0-9]{6}$",
-      "examples": ["CAPEX-000042"]
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^CAPEX-[0-9]{6}$", "examples": ["CAPEX-000042"] },
+    "budgetId": { "description": "FK -> capex-plan/capex-budget.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "title": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "description": { "$ref": "../common.schema.json#/$defs/longText" },
+    "estimatedCost": {
+      "description": "Auto-follows the linked Bill of Materials' estimated total once one exists (migration 0034); otherwise entered by hand.",
+      "$ref": "../common.schema.json#/$defs/money"
     },
-    "budgetId": {
-      "description": "Capex budget this request draws down. FK -> capex-budget.budgetId.",
-      "type": "string",
-      "pattern": "^CBUD-[0-9]{4}-[0-9]{4}$"
-    },
-    "title": { "$ref": "#/$defs/nonEmptyString" },
-    "description": { "type": "string" },
-    "assetCategory": {
-      "type": "string",
-      "enum": ["it-infrastructure", "facilities", "machinery-equipment", "vehicles", "software", "research-development", "other"]
-    },
-    "estimatedCost": { "$ref": "#/$defs/money" },
-    "currency": { "$ref": "#/$defs/currency" },
-    "justification": {
-      "description": "Business case for the expenditure.",
-      "type": "string"
-    },
-    "priority": {
-      "type": "string",
-      "enum": ["low", "medium", "high", "critical"],
-      "default": "medium"
-    },
-    "requestedBy": { "$ref": "#/$defs/nonEmptyString" },
-    "requestDate": { "$ref": "#/$defs/date" },
-    "requiredByDate": { "$ref": "#/$defs/date" },
-    "status": {
-      "type": "string",
-      "enum": ["draft", "submitted", "under-review", "approved", "rejected", "cancelled", "procured"]
-    },
+    "currency": { "$ref": "../common.schema.json#/$defs/currency" },
+    "fundingSourceId": { "description": "FK -> lookup_options.id, list_key = 'funding_source'. Nullable.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "justification": { "$ref": "../common.schema.json#/$defs/longText" },
+    "priorityId": { "description": "FK -> lookup_options.id, list_key = 'asset_request_priority'. Nullable.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "requestedBy": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "requestDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "requiredByDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "statusId": { "description": "FK -> lookup_options.id, list_key = 'asset_request_status'.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
     "approvals": {
-      "description": "Ordered trail of approval decisions, keyed to the approval matrix levels.",
+      "description": "public.asset_request_approvals rows for this request.",
       "type": "array",
-      "items": { "$ref": "#/$defs/approvalDecision" }
+      "items": { "$ref": "#/$defs/approval" }
     },
-    "createdAt": { "$ref": "#/$defs/timestamp" },
-    "updatedAt": { "$ref": "#/$defs/timestamp" }
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
   },
   "$defs": {
-    "nonEmptyString": { "type": "string", "minLength": 1 },
-    "money": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "date": { "type": "string", "format": "date" },
-    "timestamp": { "type": "string", "format": "date-time" },
-    "approvalDecision": {
+    "approval": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["level", "approverId", "decision", "decidedAt"],
+      "required": ["id", "assetRequestId", "level", "approverId", "decision", "decidedAt"],
       "properties": {
-        "level": {
-          "description": "Authorization level from the approval matrix.",
-          "type": "integer",
-          "minimum": 1
-        },
-        "approverId": { "type": "string", "minLength": 1 },
-        "approverTitle": { "type": "string" },
-        "decision": {
-          "type": "string",
-          "enum": ["approved", "rejected", "delegated"]
-        },
-        "comment": { "type": "string" },
-        "decidedAt": { "type": "string", "format": "date-time" }
+        "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "assetRequestId": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "level": { "type": "integer", "minimum": 1 },
+        "approverId": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+        "approverTitle": { "$ref": "../common.schema.json#/$defs/optionalText" },
+        "decision": { "type": "string", "enum": ["approved", "rejected", "delegated"] },
+        "comment": { "$ref": "../common.schema.json#/$defs/optionalText" },
+        "decidedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
       }
     }
   }

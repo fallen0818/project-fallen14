@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.com/project-monitoring/milestone.schema.json",
+  "title": "Milestone",
+  "description": "A deliverable/checkpoint under a Project Charter -- the 'subtask' that drives the charter's overall_progress_percent when marked Completed (migration 0022). Matches public.milestones, with public.milestone_deliverables embedded as `deliverables` and the public.milestone_dependencies self-referential join table surfaced as `dependsOnMilestoneIds`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "code", "projectId", "name", "plannedStart", "plannedEnd", "physicalProgressPercent", "statusId", "ownerId"],
+  "properties": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^MS-[0-9]{6}$", "examples": ["MS-000031"] },
+    "projectId": { "description": "FK -> project-monitoring/project-charter.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "name": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+    "description": { "$ref": "../common.schema.json#/$defs/longText" },
+    "weight": { "description": "Not currently used by the count-based overall_progress_percent formula; kept for a possible future weighted-progress version.", "type": "number", "minimum": 0, "maximum": 1 },
+    "plannedStart": { "$ref": "../common.schema.json#/$defs/date" },
+    "plannedEnd": { "$ref": "../common.schema.json#/$defs/date" },
+    "actualStart": { "$ref": "../common.schema.json#/$defs/date" },
+    "actualEnd": { "$ref": "../common.schema.json#/$defs/date" },
+    "physicalProgressPercent": { "type": "number", "minimum": 0, "maximum": 100, "default": 0 },
+    "statusId": { "description": "FK -> lookup_options.id, list_key = 'milestone_status'. Marking Completed is what counts toward the parent charter's Overall Progress %.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "deliverables": {
+      "description": "public.milestone_deliverables rows.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/deliverable" }
+    },
+    "dependsOnMilestoneIds": {
+      "description": "Backed by the public.milestone_dependencies self-referential join table (milestoneId, dependsOnId).",
+      "type": "array",
+      "items": { "$ref": "../common.schema.json#/$defs/uuid" }
+    },
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
+  },
+  "$defs": {
+    "deliverable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "milestoneId", "name", "status"],
+      "properties": {
+        "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "milestoneId": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "name": { "$ref": "../common.schema.json#/$defs/nonEmptyText" },
+        "status": { "type": "string", "enum": ["pending", "in-progress", "submitted", "accepted", "rejected"], "default": "pending" },
+        "dueDate": { "$ref": "../common.schema.json#/$defs/date" },
+        "acceptedDate": { "$ref": "../common.schema.json#/$defs/date" }
+      }
+    }
+  }
+}

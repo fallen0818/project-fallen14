@@ -2,76 +2,56 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.example.com/procurement-plan/purchase-order.schema.json",
   "title": "Purchase Order",
-  "description": "A finalized, legally binding order issued to a vendor following bid award.",
+  "description": "A finalized, legally binding order issued to a Supplier or Contractor. Matches public.purchase_orders, with public.purchase_order_lines embedded as the `lines` array. No rfqId -- dropped in migration 0041 (zero rows used it; requisitionId already gives full traceability back to what was procured).",
   "type": "object",
   "additionalProperties": false,
-  "required": ["poId", "vendorId", "orderDate", "lineItems", "currency", "total", "status"],
+  "required": ["id", "code", "orderDate", "total", "currency", "statusId", "ownerId"],
+  "not": { "required": ["vendorId", "contractorId"] },
   "properties": {
-    "poId": {
-      "type": "string",
-      "pattern": "^PO-[0-9]{6}$",
-      "examples": ["PO-000900"]
-    },
-    "rfqId": {
-      "description": "Source RFQ the award derives from. FK -> procurement-plan/vendor-bidding.rfqId.",
-      "type": "string",
-      "pattern": "^RFQ-[0-9]{6}$"
-    },
-    "requisitionId": {
-      "description": "Originating requisition. FK -> procurement-plan/purchase-requisition.requisitionId.",
-      "type": "string",
-      "pattern": "^PR-[0-9]{6}$"
-    },
-    "vendorId": { "$ref": "#/$defs/nonEmptyString" },
-    "vendorName": { "type": "string" },
-    "orderDate": { "$ref": "#/$defs/date" },
-    "expectedDeliveryDate": { "$ref": "#/$defs/date" },
-    "lineItems": {
+    "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "code": { "type": "string", "pattern": "^PO-[0-9]{6}$", "examples": ["PO-000900"] },
+    "requisitionId": { "description": "FK -> procurement-plan/purchase-requisition.id. Nullable.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "vendorId": { "description": "FK -> reference-data/vendor.id. Mutually exclusive with contractorId.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "contractorId": { "description": "FK -> reference-data/contractor.id. Mutually exclusive with vendorId.", "$ref": "../common.schema.json#/$defs/uuid" },
+    "orderDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "ntpDate": { "description": "Notice to Proceed date -- when the supplier/contractor was authorized to start; contract duration is often counted from here (migration 0030).", "$ref": "../common.schema.json#/$defs/date" },
+    "expectedDeliveryDate": { "$ref": "../common.schema.json#/$defs/date" },
+    "subtotal": { "$ref": "../common.schema.json#/$defs/money" },
+    "taxAmount": { "$ref": "../common.schema.json#/$defs/money" },
+    "shippingAmount": { "$ref": "../common.schema.json#/$defs/money" },
+    "total": { "$ref": "../common.schema.json#/$defs/money" },
+    "currency": { "$ref": "../common.schema.json#/$defs/currency" },
+    "paymentTerms": { "type": "string", "maxLength": 50, "examples": ["net-30", "net-60", "50-50", "on-delivery"] },
+    "deliveryTerms": { "type": "string", "maxLength": 50, "examples": ["FOB", "CIF", "DDP", "EXW"] },
+    "statusId": { "description": "FK -> lookup_options.id, list_key = 'purchase_order_status'.", "$ref": "../common.schema.json#/$defs/lookupRef" },
+    "ownerId": { "$ref": "../common.schema.json#/$defs/uuid" },
+    "lines": {
+      "description": "public.purchase_order_lines rows for this PO. No detail-view editor in the app yet -- flagged in the top-level README as a next iteration.",
       "type": "array",
-      "minItems": 1,
-      "items": { "$ref": "#/$defs/poLine" }
+      "items": { "$ref": "#/$defs/line" }
     },
-    "subtotal": { "$ref": "#/$defs/money" },
-    "taxAmount": { "$ref": "#/$defs/money" },
-    "shippingAmount": { "$ref": "#/$defs/money" },
-    "total": { "$ref": "#/$defs/money" },
-    "currency": { "$ref": "#/$defs/currency" },
-    "paymentTerms": {
-      "type": "string",
-      "examples": ["net-30", "net-60", "50-50", "on-delivery"]
-    },
-    "deliveryTerms": {
-      "description": "Incoterms or delivery arrangement.",
-      "type": "string",
-      "examples": ["FOB", "CIF", "DDP", "EXW"]
-    },
-    "status": {
-      "type": "string",
-      "enum": ["issued", "acknowledged", "partially-received", "received", "invoiced", "paid", "closed", "cancelled"]
-    },
-    "createdAt": { "$ref": "#/$defs/timestamp" }
+    "createdAt": { "$ref": "../common.schema.json#/$defs/timestamp" },
+    "updatedAt": { "$ref": "../common.schema.json#/$defs/timestamp" }
   },
   "$defs": {
-    "nonEmptyString": { "type": "string", "minLength": 1 },
-    "money": { "type": "number", "minimum": 0 },
-    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "date": { "type": "string", "format": "date" },
-    "timestamp": { "type": "string", "format": "date-time" },
-    "poLine": {
+    "line": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["procurementItemId", "quantity", "unitPrice"],
+      "required": ["id", "poId", "procurementItemId", "quantity", "unitPrice"],
       "properties": {
-        "procurementItemId": {
-          "description": "FK -> procurement-plan/procurement-item.itemId.",
-          "type": "string",
-          "pattern": "^PRC-ITEM-[0-9]{6}$"
-        },
-        "description": { "type": "string" },
-        "quantity": { "type": "number", "exclusiveMinimum": 0 },
-        "unitPrice": { "$ref": "#/$defs/money" },
-        "lineTotal": { "$ref": "#/$defs/money" },
-        "receivedQuantity": { "type": "number", "minimum": 0, "default": 0 }
+        "id": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "poId": { "$ref": "../common.schema.json#/$defs/uuid" },
+        "procurementItemId": { "description": "FK -> procurement-plan/procurement-item.id.", "$ref": "../common.schema.json#/$defs/uuid" },
+        "description": { "$ref": "../common.schema.json#/$defs/optionalText" },
+        "quantity": { "type": "number", "exclusiveMinimum": 0, "maximum": 100000 },
+        "unitPrice": { "$ref": "../common.schema.json#/$defs/money" },
+        "lineTotal": { "$ref": "../common.schema.json#/$defs/money" },
+        "receivedQuantity": {
+          "description": "Should not exceed quantity; not enforced at schema level (JSON Schema can't compare sibling properties) -- validate in application logic.",
+          "type": "number",
+          "minimum": 0,
+          "default": 0
+        }
       }
     }
   }
